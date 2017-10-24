@@ -8,6 +8,7 @@ uses
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
   TAria2GID = Int64;
+  TAria2GIDArray = array of TAria2GID;
   TAria2Options = class
   private
     FJson: string;
@@ -32,7 +33,7 @@ type
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');
     function AddUri(const Uris: array of string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GID;
     function AddTorrent(const Torrent: string; const Uris: array of string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GID;
-    function AddMetalink(const Metalink: string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GID;
+    function AddMetalink(const Metalink: string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GIDArray;
     function Remove(GID: TAria2GID; Force: Boolean = false): TAria2GID;
     function Pause(GID: TAria2GID; Force: Boolean = false): TAria2GID;
     function PauseAll(Force: Boolean): Boolean;
@@ -128,10 +129,22 @@ begin
     [Base64Encode(Torrent), UrisToJson(Uris), Check(Assigned(Options), Options.Json), Check(Position >= 0, IntToStr(Position))])));
 end;
 
-function TAria2.AddMetalink(const Metalink: string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GID;
+function TAria2.AddMetalink(const Metalink: string; Options: TAria2Options = nil; Position: Integer = -1): TAria2GIDArray;
+var
+  i: Integer;
+  Res: PJsonValue;
 begin
-  Result := StrToGID(SendRequestStr('aria2.addMetalink', MakeParams(['', '{}', ''],
-    [Base64Encode(Metalink), Check(Assigned(Options), Options.Json), Check(Position >= 0, IntToStr(Position))])));
+  Result := nil;
+  Res := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
+    [Base64Encode(Metalink), Check(Assigned(Options), Options.Json), Check(Position >= 0, IntToStr(Position))]));
+  try
+    if Res.VType <> jtArray then Exit;
+    SetLength(Result, Res.Arr.Length);
+    for i := 0 to Res.Arr.Length - 1 do
+      Result[i] := StrToGID(JsonStr(JsonItem(Res, i)));
+  finally
+    JsonFree(Res);
+  end;
 end;
 
 function TAria2.Remove(GID: TAria2GID; Force: Boolean = false): TAria2GID;
