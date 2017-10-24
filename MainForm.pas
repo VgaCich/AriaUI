@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlTrayIcon, Aria2, RequestTransport, TransfersList, InfoPane;
+  avlTrayIcon, avlJSON, Aria2, RequestTransport, TransfersList, InfoPane;
 
 type
   TMainForm = class(TForm)
@@ -235,8 +235,9 @@ begin
         IDExit, IDTrayExit: ExitProgram;
         IDAbout, IDTrayAbout: ShowAbout;
         IDTrayShow: if Visible then Hide else Show;
+        IDServerOptions: MessageDlg(JsonToStr(FAria.GetGlobalOptions), 'Aria2 Options', MB_ICONINFORMATION);
         IDShutdownServer: FAria.Shutdown;
-        IDServerVersion: MessageDlg(FAria.GetVersion, 'Aria2 version', MB_ICONINFORMATION);
+        IDServerVersion: MessageDlg('Aria2 ' + FAria.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
       end;
     except
       on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
