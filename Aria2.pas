@@ -19,6 +19,7 @@ type
     FRPCSecret: string;
     function AddToken(const Params: string): string;
     function NewId: string;
+  protected
     function SendRequest(const Method, Params: string): PJsonValue;
     function SendRequestStr(const Method, Params: string): string;
   public
@@ -84,12 +85,12 @@ const
   sfDir = 'dir';
   sfFiles = 'files';
   sfBittorrent = 'bittorrent';
-  sfbtAnnounceList = 'announceList';
-  sfbtComment = 'comment';
-  sfbtCreationDate = 'creationDate';
-  sfbtMode = 'mode';
-  sfbtInfo = 'info';
-  sfbtiName = 'name';
+  sfAnnounceList = 'announceList';
+  sfComment = 'comment';
+  sfCreationDate = 'creationDate';
+  sfMode = 'mode';
+  sfInfo = 'info';
+  sfName = 'name';
   sfVerifiedLength = 'verifiedLength';
   sfVerifyPenfing = 'verifyIntegrityPending';
   sfUri = 'uri';
