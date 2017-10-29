@@ -49,9 +49,10 @@ const
 implementation
 
 type
-  TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbOptions, tbExit);
+  TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDMenuFileSep0, IDExit,
-             IDMenuServer = 2000, IDServerOptions, IDShutdownServer, IDServerVersion,
+             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDMenuTransfersSep0, IDMoveUp, IDMoveDown, IDMenuTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
+             IDMenuServer = 3000, IDServerOptions, IDShutdownServer, IDServerVersion,
              IDMenuHelp = 5000, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTrayAbout, IDTrayMenuSep0, IDTrayExit);
 
@@ -70,8 +71,21 @@ const
     'Op&tions...',
     '-',
     'E&xit'#9'Alt-X');
+  MenuTransfersCapt = '&Transfers';
+  MenuTransfers: array[0..11] of PChar = ('2001',
+    '&Resume',
+    '&Pause',
+    'R&emove',
+    'Pr&operties...',
+    '-',
+    'Move &up',
+    'Move &down',
+    '-',
+    'Resume all',
+    'Pause all',
+    'Purge &completed');
   MenuServerCapt = '&Server';
-  MenuServer: array[0..3] of PChar = ('2001',
+  MenuServer: array[0..3] of PChar = ('3001',
     'Server &options...',
     '&Shutdown server',
     'Server &version...');
@@ -83,17 +97,24 @@ const
     '&About...',
     '-',
     'E&xit');
-  TBButtons: array[0..5] of record Caption: string; ImageIndex: Integer; end = (
+  TBButtons: array[0..12] of record Caption: string; ImageIndex: Integer; end = (
     (Caption: 'Add URL...'; ImageIndex: 0),
     (Caption: 'Add .torrent'; ImageIndex: 1),
     (Caption: 'Add .metalink'; ImageIndex: 2),
     (Caption: '-'; ImageIndex: -1),
+    (Caption: 'Resume'; ImageIndex: 3),
+    (Caption: 'Pause'; ImageIndex: 4),
+    (Caption: 'Remove'; ImageIndex: 5),
+    (Caption: '-'; ImageIndex: -1),
+    (Caption: 'Move up'; ImageIndex: 6),
+    (Caption: 'Move down'; ImageIndex: 7),
+    (Caption: '-'; ImageIndex: -1),
     (Caption: 'Options'; ImageIndex: 8),
-    (Caption: 'Exit'; ImageIndex: 7));
-  TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDExit);
+    (Caption: 'Exit'; ImageIndex: 9));
+  TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
 
 var
-  Accels: array[0..4] of TAccel = (
+  Accels: array[0..4] of TAccel = ( //TODO: More accels
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('U'); Cmd: Ord(IDAddURL)),
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('O'); Cmd: Ord(IDAddTorrent)),
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('M'); Cmd: Ord(IDAddMetalink)),
@@ -122,6 +143,7 @@ begin
   FMinWidth := 400;
   MainMenu := TMenu.Create(Self, true, ['0']);
   AddMenu(MenuFileCapt, Ord(IDMenuFile), MenuFile);
+  AddMenu(MenuTransfersCapt, Ord(IDMenuTransfers), MenuTransfers);
   AddMenu(MenuServerCapt, Ord(IDMenuServer), MenuServer);
   AddMenu(MenuHelpCapt, Ord(IDMenuHelp), MenuHelp);
   SetMenu(Handle, MainMenu.Handle);
@@ -235,7 +257,7 @@ begin
         IDExit, IDTrayExit: ExitProgram;
         IDAbout, IDTrayAbout: ShowAbout;
         IDTrayShow: if Visible then Hide else Show;
-        IDServerOptions: MessageDlg(JsonToStr(FAria.GetGlobalOptions), 'Aria2 Options', MB_ICONINFORMATION);
+        IDServerOptions: MessageDlg(JsonToStr(FAria.GetGlobalOptions), 'Aria2 options', MB_ICONINFORMATION);
         IDShutdownServer: FAria.Shutdown;
         IDServerVersion: MessageDlg('Aria2 ' + FAria.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
       end;
