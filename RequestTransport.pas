@@ -41,6 +41,7 @@ procedure TRequestTransport.Connect(const Server: string; Port: Word; const User
 begin
   if FSession = nil then
     raise Exception.Create('WinInet not initialized');
+  Disconnect;
   FConnection := InternetConnect(FSession, PChar(Server), Port, PChar(UserName), PChar(Password), INTERNET_SERVICE_HTTP, INTERNET_FLAG_EXISTING_CONNECT, 0);
   if FConnection = nil then
     raise Exception.Create('Can''t connect to Aria2 server');

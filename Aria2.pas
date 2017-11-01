@@ -1,5 +1,7 @@
 unit Aria2;
 
+//TODO: parameter escaping
+
 interface
 
 uses
@@ -7,12 +9,36 @@ uses
 
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
+  PAria2GID = ^TAria2GID;
   TAria2GID = Int64;
   TAria2GIDArray = array of TAria2GID;
   TAria2PosOrigin = (poFromBeginning, poFromCurrent, poFromEnd);
   TAria2Status = (asActive, asWaiting, asPaused, asError, asComplete, asRemoved);
   TAria2TorrentMode = (atmSingle, atmMulti);
   TAria2UriStatus = (ausUsed, ausWaiting);
+  TAria2Struct = class
+  private
+    FIndex: Integer;
+    FJson: PJsonValue;
+    function Find(Name: string): PJsonValue;
+    function GetLength(const Name: string): Integer;
+    function GetStr(const Name: string): string;
+    function GetBool(const Name: string): Boolean;
+    function GetInt(const Name: string): Integer;
+    function GetInt64(const Name: string): Int64;
+    function Exists(const Name: string): Boolean;
+  public
+    constructor Create(Json: PJsonValue);
+    destructor Destroy; override;
+    property Raw: PJsonValue read FJson;
+    property Index: Integer read FIndex write FIndex;
+    property Has[const Name: string]: Boolean read Exists;
+    property Length[const Name: string]: Integer read GetLength;
+    property Str[const Name: string]: string read GetStr; default;
+    property Bool[const Name: string]: Boolean read GetBool;
+    property Int[const Name: string]: Integer read GetInt;
+    property Int64[const Name: string]: Int64 read GetInt64;
+  end;
   TAria2 = class
   private
     FOnRequest: TOnRPCRequest;
@@ -32,25 +58,25 @@ type
     function PauseAll(Force: Boolean = false): Boolean;
     function Unpause(GID: TAria2GID): TAria2GID;
     function UnpauseAll: Boolean;
-    function TellStatus(GID: TAria2GID; const Keys: array of string): PJsonValue;
-    function GetUris(GID: TAria2GID): PJsonValue;
-    function GetFiles(GID: TAria2GID): PJsonValue;
-    function GetPeers(GID: TAria2GID): PJsonValue;
-    function GetServers(GID: TAria2GID): PJsonValue;
-    function TellActive(const Keys: array of string): PJsonValue;
-    function TellWaiting(Offset, Num: Integer; const Keys: array of string): PJsonValue;
-    function TellStopped(Offset, Num: Integer; const Keys: array of string): PJsonValue;
+    function TellStatus(GID: TAria2GID; const Keys: array of string): TAria2Struct;
+    function GetUris(GID: TAria2GID): TAria2Struct;
+    function GetFiles(GID: TAria2GID): TAria2Struct;
+    function GetPeers(GID: TAria2GID): TAria2Struct;
+    function GetServers(GID: TAria2GID): TAria2Struct;
+    function TellActive(const Keys: array of string): TAria2Struct;
+    function TellWaiting(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
+    function TellStopped(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
     function ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): Integer;
     function ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer = -1): Cardinal;
-    function GetOptions(GID: TAria2GID): PJsonValue;
+    function GetOptions(GID: TAria2GID): TAria2Struct;
     function ChangeOptions(GID: TAria2GID; const Options: string): Boolean;
-    function GetGlobalOptions: PJsonValue;
+    function GetGlobalOptions: TAria2Struct;
     function ChangeGlobalOptions(const Options: string): Boolean;
-    function GetGlobalStats: PJsonValue;
+    function GetGlobalStats: TAria2Struct;
     function PurgeDownloadResult: Boolean;
     function RemoveDownloadResult(GID: TAria2GID): Boolean;
     function GetVersion(Features: Boolean = false): string;
-    function GetSessionInfo: PJsonValue;
+    function GetSessionInfo: TAria2Struct;
     function Shutdown(Force: Boolean = false): Boolean;
     function SaveSession: Boolean;
     property OnRequest: TOnRPCRequest read FOnRequest write FOnRequest;
@@ -85,14 +111,14 @@ const
   sfDir = 'dir';
   sfFiles = 'files';
   sfBittorrent = 'bittorrent';
-  sfAnnounceList = 'announceList';
-  sfComment = 'comment';
-  sfCreationDate = 'creationDate';
-  sfMode = 'mode';
-  sfInfo = 'info';
-  sfName = 'name';
+  sfBTAnnounceList = 'bittorrent.announceList';
+  sfBTComment = 'bittorrent.comment';
+  sfBTCreationDate = 'bittorrent.creationDate';
+  sfBTMode = 'bittorrent.mode';
+  sfBTInfo = 'bittorrent.info';
+  sfBTName = 'bittorrent.info.name';
   sfVerifiedLength = 'verifiedLength';
-  sfVerifyPenfing = 'verifyIntegrityPending';
+  sfVerifyPending = 'verifyIntegrityPending';
   sfUri = 'uri';
   sfUris = 'uris';
   sfIndex = 'index';
@@ -267,44 +293,44 @@ begin
   Result := SendRequestStr('aria2.unpauseAll', '') = 'OK';
 end;
 
-function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): PJsonValue;
+function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): TAria2Struct;
 begin
-  Result := SendRequest('aria2.tellStatus', MakeParams(['""', ''], [Quote(GIDToStr(GID)), ArrayToJson(Keys)]));
+  Result := TAria2Struct.Create(SendRequest('aria2.tellStatus', MakeParams(['""', ''], [Quote(GIDToStr(GID)), ArrayToJson(Keys)])));
 end;
 
-function TAria2.GetUris(GID: TAria2GID): PJsonValue;
+function TAria2.GetUris(GID: TAria2GID): TAria2Struct;
 begin
-  Result := SendRequest('aria2.getUris', Quote(GIDToStr(GID)));
+  Result := TAria2Struct.Create(SendRequest('aria2.getUris', Quote(GIDToStr(GID))));
 end;
 
-function TAria2.GetFiles(GID: TAria2GID): PJsonValue;
+function TAria2.GetFiles(GID: TAria2GID): TAria2Struct;
 begin
-  Result := SendRequest('aria2.getFiles', Quote(GIDToStr(GID)));
+  Result := TAria2Struct.Create(SendRequest('aria2.getFiles', Quote(GIDToStr(GID))));
 end;
 
-function TAria2.GetPeers(GID: TAria2GID): PJsonValue;
+function TAria2.GetPeers(GID: TAria2GID): TAria2Struct;
 begin
-  Result := SendRequest('aria2.getPeers', Quote(GIDToStr(GID)));
+  Result := TAria2Struct.Create(SendRequest('aria2.getPeers', Quote(GIDToStr(GID))));
 end;
 
-function TAria2.GetServers(GID: TAria2GID): PJsonValue;
+function TAria2.GetServers(GID: TAria2GID): TAria2Struct;
 begin
-  Result := SendRequest('aria2.getServers', Quote(GIDToStr(GID)));
+  Result := TAria2Struct.Create(SendRequest('aria2.getServers', Quote(GIDToStr(GID))));
 end;
 
-function TAria2.TellActive(const Keys: array of string): PJsonValue;
+function TAria2.TellActive(const Keys: array of string): TAria2Struct;
 begin
-  Result := SendRequest('aria2.tellActive', ArrayToJson(Keys));
+  Result := TAria2Struct.Create(SendRequest('aria2.tellActive', ArrayToJson(Keys)));
 end;
 
-function TAria2.TellWaiting(Offset, Num: Integer; const Keys: array of string): PJsonValue;
+function TAria2.TellWaiting(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
 begin
-  Result := SendRequest('aria2.tellWaiting', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
+  Result := TAria2Struct.Create(SendRequest('aria2.tellWaiting', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)])));
 end;
 
-function TAria2.TellStopped(Offset, Num: Integer; const Keys: array of string): PJsonValue;
+function TAria2.TellStopped(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
 begin
-  Result := SendRequest('aria2.tellStopped', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
+  Result := TAria2Struct.Create(SendRequest('aria2.tellStopped', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)])));
 end;
 
 function TAria2.ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): Integer;
@@ -334,9 +360,9 @@ begin
   end;
 end;
 
-function TAria2.GetOptions(GID: TAria2GID): PJsonValue;
+function TAria2.GetOptions(GID: TAria2GID): TAria2Struct;
 begin
-  Result := SendRequest('aria2.getOption', Quote(GIDToStr(GID)));
+  Result := TAria2Struct.Create(SendRequest('aria2.getOption', Quote(GIDToStr(GID))));
 end;
 
 function TAria2.ChangeOptions(GID: TAria2GID; const Options: string): Boolean;
@@ -344,9 +370,9 @@ begin
   Result := SendRequestStr('aria2.changeOption', MakeParams(['""', '""'], [Quote(GIDToStr(GID)), Options])) = 'OK';
 end;
 
-function TAria2.GetGlobalOptions: PJsonValue;
+function TAria2.GetGlobalOptions: TAria2Struct;
 begin
-  Result := SendRequest('aria2.getGlobalOption', '');
+  Result := TAria2Struct.Create(SendRequest('aria2.getGlobalOption', ''));
 end;
 
 function TAria2.ChangeGlobalOptions(const Options: string): Boolean;
@@ -354,9 +380,9 @@ begin
   Result := SendRequestStr('aria2.changeGlobalOption', Options) = 'OK';
 end;
 
-function TAria2.GetGlobalStats: PJsonValue;
+function TAria2.GetGlobalStats: TAria2Struct;
 begin
-  Result := SendRequest('aria2.getGlobalStat', '');
+  Result := TAria2Struct.Create(SendRequest('aria2.getGlobalStat', ''));
 end;
 
 function TAria2.PurgeDownloadResult: Boolean;
@@ -395,9 +421,9 @@ begin
   end;
 end;
 
-function TAria2.GetSessionInfo: PJsonValue;
+function TAria2.GetSessionInfo: TAria2Struct;
 begin
-  Result := SendRequest('aria2.getSessionInfo', '');
+  Result := TAria2Struct.Create(SendRequest('aria2.getSessionInfo', ''));
 end;
 
 function TAria2.Shutdown(Force: Boolean): Boolean;
@@ -468,6 +494,71 @@ begin
   finally
     JsonFree(Res);
   end;
+end;
+
+{ TAria2Struct }
+
+constructor TAria2Struct.Create(Json: PJsonValue);
+begin
+  inherited Create;
+  FIndex := -1;
+  FJson := Json;
+end;
+
+destructor TAria2Struct.Destroy;
+begin
+  JsonFree(FJson);
+  inherited;
+end;
+
+function TAria2Struct.Exists(const Name: string): Boolean;
+begin
+  Result := Assigned(Find(Name));
+end;
+
+function TAria2Struct.Find(Name: string): PJsonValue;
+begin
+  if FIndex < 0 then
+    Result := FJson
+  else
+    Result := JsonItem(FJson, FIndex);
+  while Assigned(Result) and (Name <> '') do
+    if Result.VType = jtArray then
+      Result := JsonItem(Result, StrToInt(Tok('.', Name)))
+    else if Result.VType = jtObject then
+      Result := JsonItem(Result, Tok('.', Name))
+    else
+      Result := nil;
+end;
+
+function TAria2Struct.GetBool(const Name: string): Boolean;
+begin
+  Result := Boolean(StrToEnum(Str[Name], sfBoolValues));
+end;
+
+function TAria2Struct.GetInt(const Name: string): Integer;
+begin
+  Result := StrToint(Str[Name]);
+end;
+
+function TAria2Struct.GetInt64(const Name: string): Int64;
+begin
+  Result := StrToInt64(Str[Name]);
+end;
+
+function TAria2Struct.GetLength(const Name: string): Integer;
+var
+  Item: PJsonValue;
+begin
+  Result := -1;
+  Item := Find(Name);
+  if Assigned(Item) and (Item.VType = jtArray) then
+    Result := Item.Arr.Length;
+end;
+
+function TAria2Struct.GetStr(const Name: string): string;
+begin
+  Result := JsonStr(Find(Name));
 end;
 
 end.
