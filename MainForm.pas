@@ -224,6 +224,7 @@ constructor TMainForm.Create;
 
 var
   i: Integer;
+  FTemp: string;
 begin
   inherited Create(nil, AppCaption);
   Settings := TSettings.Create(AppName); //TODO: Detect first run and run first start wizard
@@ -304,7 +305,9 @@ begin
     with FTransferColumns[i] do
     begin
       TransfersList.ColumnAdd(Caption, Width);
-      AddTransferKey(Field);
+      FTemp := Field;
+      while FTemp <> '' do
+        AddTransferKey(Tok(':', FTemp));
     end;
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
