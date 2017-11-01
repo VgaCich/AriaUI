@@ -1,7 +1,5 @@
 unit Aria2;
 
-//TODO: parameter escaping
-
 interface
 
 uses
@@ -16,6 +14,9 @@ type
   TAria2Status = (asActive, asWaiting, asPaused, asError, asComplete, asRemoved);
   TAria2TorrentMode = (atmSingle, atmMulti);
   TAria2UriStatus = (ausUsed, ausWaiting);
+  TAria2Option = record
+    Key, Value: string;
+  end;
   TAria2Struct = class
   private
     FIndex: Integer;
@@ -50,9 +51,9 @@ type
     function SendRequestStr(const Method, Params: string): string;
   public
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');
-    function AddUri(const Uris: array of string; const Options: string = ''; Position: Integer = -1): TAria2GID;
-    function AddTorrent(const Torrent: string; const Uris: array of string; const Options: string = ''; Position: Integer = -1): TAria2GID;
-    function AddMetalink(const Metalink: string; const Options: string = ''; Position: Integer = -1): TAria2GIDArray;
+    function AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
+    function AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
+    function AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GIDArray;
     function Remove(GID: TAria2GID; Force: Boolean = false): TAria2GID;
     function Pause(GID: TAria2GID; Force: Boolean = false): TAria2GID;
     function PauseAll(Force: Boolean = false): Boolean;
@@ -69,9 +70,9 @@ type
     function ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): Integer;
     function ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer = -1): Cardinal;
     function GetOptions(GID: TAria2GID): TAria2Struct;
-    function ChangeOptions(GID: TAria2GID; const Options: string): Boolean;
+    function ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): Boolean;
     function GetGlobalOptions: TAria2Struct;
-    function ChangeGlobalOptions(const Options: string): Boolean;
+    function ChangeGlobalOptions(const Options: array of TAria2Option): Boolean;
     function GetGlobalStats: TAria2Struct;
     function PurgeDownloadResult: Boolean;
     function RemoveDownloadResult(GID: TAria2GID): Boolean;
@@ -154,6 +155,8 @@ var
   G: packed record Lo, Hi: Integer; end absolute GID;
 begin
   Result := LowerCase(IntToHex(G.Hi, 8) + IntToHex(G.Lo, 8));
+  while (Length(Result) > 1) and (Result[1] = '0') do
+    Delete(Result, 1, 1); 
 end;
 
 function StrToEnum(const S: string; const Values: array of string): Integer;
@@ -185,12 +188,33 @@ begin
     Result := '';
 end;
 
-function Quote(const S: string): string;
+function Escape(C: Char): string;
+const
+  Esc: array[0..7] of record C: Char; R: string; end = (
+    (C: '"'; R: '\"'), (C: '\'; R: '\\'),
+    (C: '/'; R: '\/'), (C: #$08; R: '\b'),
+    (C: #$09; R: '\t'), (C: #$0A; R: '\n'),
+    (C: #$0C; R: '\f'), (C: #$0D; R: '\r'));
+var
+  i: Integer;
 begin
-  if S = '' then
-    Result := S
-  else
-    Result := '"' + S + '"';
+  for i := Low(Esc) to High(Esc) do
+    if C = Esc[i].C then
+    begin
+      Result := Esc[i].R;
+      Exit;
+    end;
+  Result := C;
+end;
+
+function MakeStr(const S: string): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to Length(S) do
+    Result := Result + Escape(S[i]);
+  Result := '"' + Result + '"';
 end;
 
 function ArrayToJson(const Items: array of string): string;
@@ -204,8 +228,23 @@ begin
   end;
   Result := '[';
   for i := 0 to High(Items) do
-    Result := Result + Quote(Items[i]) + ',';
+    Result := Result + MakeStr(Items[i]) + ',';
   Result[Length(Result)] := ']';
+end;
+
+function OptionsToJson(const Items: array of TAria2Option): string;
+var
+  i: Integer;
+begin
+  if Length(Items) < 1 then
+  begin
+    Result := '';
+    Exit;
+  end;
+  Result := '{';
+  for i := 0 to High(Items) do
+    Result := Result + MakeStr(Items[i].Key) + ':' + MakeStr(Items[i].Value) + ',';
+  Result[Length(Result)] := '}';
 end;
 
 function MakeParams(const Placeholders, Params: array of string): string;
@@ -232,26 +271,26 @@ begin
   FRPCSecret := RPCSecret;
 end;
 
-function TAria2.AddUri(const Uris: array of string; const Options: string; Position: Integer): TAria2GID;
+function TAria2.AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
 begin
   Result := StrToGID(SendRequestStr('aria2.addUri', MakeParams(['', '{}', ''],
-    [ArrayToJson(Uris), Options, Check(Position >= 0, IntToStr(Position))])));
+    [ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))])));
 end;
 
-function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: string; Position: Integer): TAria2GID;
+function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
 begin
   Result := StrToGID(SendRequestStr('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
-    [Quote(Base64Encode(Torrent)), ArrayToJson(Uris), Options, Check(Position >= 0, IntToStr(Position))])));
+    [MakeStr(Base64Encode(Torrent)), ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))])));
 end;
 
-function TAria2.AddMetalink(const Metalink: string; const Options: string; Position: Integer): TAria2GIDArray;
+function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GIDArray;
 var
   i: Integer;
   Res: PJsonValue;
 begin
   Result := nil;
   Res := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
-    [Quote(Base64Encode(Metalink)), Options, Check(Position >= 0, IntToStr(Position))]));
+    [MakeStr(Base64Encode(Metalink)), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
   try
     if Res.VType <> jtArray then Exit;
     SetLength(Result, Res.Arr.Length);
@@ -266,14 +305,14 @@ function TAria2.Remove(GID: TAria2GID; Force: Boolean): TAria2GID;
 const
   Method: array[Boolean] of string = ('aria2.remove', 'aria2.forceRemove');
 begin
-  Result := StrToGID(SendRequestStr(Method[Force], Quote(GIDToStr(GID))));
+  Result := StrToGID(SendRequestStr(Method[Force], MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.Pause(GID: TAria2GID; Force: Boolean): TAria2GID;
 const
   Method: array[Boolean] of string = ('aria2.pause', 'aria2.forcePause');
 begin
-  Result := StrToGID(SendRequestStr(Method[Force], Quote(GIDToStr(GID))));
+  Result := StrToGID(SendRequestStr(Method[Force], MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.PauseAll(Force: Boolean): Boolean;
@@ -285,7 +324,7 @@ end;
 
 function TAria2.Unpause(GID: TAria2GID): TAria2GID;
 begin
-  Result := StrToGID(SendRequestStr('aria2.unpause', Quote(GIDToStr(GID))));
+  Result := StrToGID(SendRequestStr('aria2.unpause', MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.UnpauseAll: Boolean;
@@ -295,27 +334,27 @@ end;
 
 function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.tellStatus', MakeParams(['""', ''], [Quote(GIDToStr(GID)), ArrayToJson(Keys)])));
+  Result := TAria2Struct.Create(SendRequest('aria2.tellStatus', MakeParams(['""', ''], [MakeStr(GIDToStr(GID)), ArrayToJson(Keys)])));
 end;
 
 function TAria2.GetUris(GID: TAria2GID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getUris', Quote(GIDToStr(GID))));
+  Result := TAria2Struct.Create(SendRequest('aria2.getUris', MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.GetFiles(GID: TAria2GID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getFiles', Quote(GIDToStr(GID))));
+  Result := TAria2Struct.Create(SendRequest('aria2.getFiles', MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.GetPeers(GID: TAria2GID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getPeers', Quote(GIDToStr(GID))));
+  Result := TAria2Struct.Create(SendRequest('aria2.getPeers', MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.GetServers(GID: TAria2GID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getServers', Quote(GIDToStr(GID))));
+  Result := TAria2Struct.Create(SendRequest('aria2.getServers', MakeStr(GIDToStr(GID))));
 end;
 
 function TAria2.TellActive(const Keys: array of string): TAria2Struct;
@@ -339,7 +378,7 @@ const
 var
   Res: PJsonValue;
 begin
-  Res := SendRequest('aria2.changePosition', MakeParams(['""', '', ''], [Quote(GIDToStr(GID)), IntToStr(Pos), OriginValues[Origin]]));
+  Res := SendRequest('aria2.changePosition', MakeParams(['""', '', ''], [MakeStr(GIDToStr(GID)), IntToStr(Pos), OriginValues[Origin]]));
   try
     Result := JsonInt(Res);
   finally
@@ -352,7 +391,7 @@ var
   Res: PJsonValue;
 begin
   Res := SendRequest('aria2.changeUri', MakeParams(['""', '', '[]', '[]', ''],
-    [Quote(GIDToStr(GID)), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]));
+    [MakeStr(GIDToStr(GID)), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]));
   try
     Result := MakeDword(JsonInt(JsonItem(Res, 1)), JsonInt(JsonItem(Res, 0)));
   finally
@@ -362,12 +401,12 @@ end;
 
 function TAria2.GetOptions(GID: TAria2GID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getOption', Quote(GIDToStr(GID))));
+  Result := TAria2Struct.Create(SendRequest('aria2.getOption', MakeStr(GIDToStr(GID))));
 end;
 
-function TAria2.ChangeOptions(GID: TAria2GID; const Options: string): Boolean;
+function TAria2.ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): Boolean;
 begin
-  Result := SendRequestStr('aria2.changeOption', MakeParams(['""', '""'], [Quote(GIDToStr(GID)), Options])) = 'OK';
+  Result := SendRequestStr('aria2.changeOption', MakeParams(['""', '""'], [MakeStr(GIDToStr(GID)), OptionsToJson(Options)])) = 'OK';
 end;
 
 function TAria2.GetGlobalOptions: TAria2Struct;
@@ -375,9 +414,10 @@ begin
   Result := TAria2Struct.Create(SendRequest('aria2.getGlobalOption', ''));
 end;
 
-function TAria2.ChangeGlobalOptions(const Options: string): Boolean;
+function TAria2.ChangeGlobalOptions(const Options: array of TAria2Option):
+  Boolean;
 begin
-  Result := SendRequestStr('aria2.changeGlobalOption', Options) = 'OK';
+  Result := SendRequestStr('aria2.changeGlobalOption', OptionsToJson(Options)) = 'OK';
 end;
 
 function TAria2.GetGlobalStats: TAria2Struct;
@@ -392,7 +432,7 @@ end;
 
 function TAria2.RemoveDownloadResult(GID: TAria2GID): Boolean;
 begin
-  Result := SendRequestStr('aria2.removeDownloadResult', Quote(GIDToStr(GID))) = 'OK';
+  Result := SendRequestStr('aria2.removeDownloadResult', MakeStr(GIDToStr(GID))) = 'OK';
 end;
 
 function TAria2.GetVersion(Features: Boolean): string;
