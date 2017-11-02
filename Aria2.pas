@@ -500,7 +500,7 @@ const
   RequestTemplate = '{"jsonrpc":"2.0","id":"%s","method":"%s","params":[%s]}';
 var
   Id: string;
-  Reply: PJsonValue;
+  Reply, ReplyId: PJsonValue;
 begin
   Result := nil;
   if not Assigned(FOnRequest) then
@@ -510,7 +510,8 @@ begin
   if not Assigned(Reply) then
     raise Exception.Create('Aria2: invalid reply');
   try
-    if JsonStr(JsonItem(Reply, 'id')) <> Id then
+    ReplyId := JsonItem(Reply, 'id');
+    if (JsonStr(ReplyId) <> Id) and (Assigned(ReplyId) and not (ReplyId.VType in [jtNone, jtNull])) then
       raise Exception.Create('Aria2: reply id mismatch');
     if Assigned(JsonItem(Reply, 'error')) then
       raise Exception.CreateFmt('Aria2: request error %d: %s',

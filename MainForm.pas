@@ -30,7 +30,7 @@ type
   end;
   TMainForm = class(TForm)
     Settings: TSettings;
-    MainMenu, TrayMenu: TMenu;
+    MainMenu, TrayMenu, TransfersMenu: TMenu;
     ToolBar: TToolBar;
     StatusBar: TStatusBar;
     Splitter: TSplitter;
@@ -83,6 +83,7 @@ type
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
     //procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;
     procedure WMSizing(var Msg: TWMMoving); message WM_SIZING;
+    procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
   public
     constructor Create;
     destructor Destroy; override;
@@ -186,8 +187,8 @@ const
     (Caption: 'Options...'; ImageIndex: 8),
     (Caption: 'Exit'; ImageIndex: 9));
   TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
-  BasicTransferKeys: array[0..5] of string = (sfGID, sfBittorrent, {sfFiles,} sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending);
-  DefTransferColumns: array[0..9] of TTransferColumn = (
+  BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, {sfFiles,} sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
+  DefTransferColumns: array[0..10] of TTransferColumn = (
     (Caption: 'Name'; Width: 200; FType: tftName; Field: ''),
     (Caption: 'Size'; Width: 80; FType: tftSize; Field: sfTotalLength),
     (Caption: 'Progress'; Width: 60; FType: tftPercent; Field: sfCompletedLength + ':' + sfTotalLength),
@@ -196,6 +197,7 @@ const
     (Caption: 'Uploaded'; Width: 80; FType: tftSize; Field: sfUploadLength),
     (Caption: 'DL speed'; Width: 80; FType: tftSpeed; Field: sfDownloadSpeed),
     (Caption: 'UL speed'; Width: 80; FType: tftSpeed; Field: sfUploadSpeed),
+    (Caption: 'Ratio'; Width: 50; FType: tftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
     (Caption: 'Conns.'; Width: 50; FType: tftString; Field: sfConnections),
     (Caption: 'Seeds'; Width: 50; FType: tftString; Field: sfNumSeeders));
   SBParts: array[TSBPart] of Integer = (100, 250, 400, -1);
@@ -265,6 +267,7 @@ begin
   AddMenu(MenuHelpCapt, Ord(IDMenuHelp), MenuHelp);
   SetMenu(Handle, MainMenu.Handle);
   TrayMenu := TMenu.Create(Self, false, MenuTray);
+  TransfersMenu := TMenu.Create(Self, false, MenuTransfers);
   TrayIcon := TAvLTrayIcon.Create;
   TrayIcon.ToolTip := Caption;
   TrayIcon.Icon := LoadImage(hInstance, 'MAINICON', IMAGE_ICON, 16, 16, LR_SHARED);
@@ -428,7 +431,7 @@ begin
         IDPauseAll, IDTrayPauseAll: FAria2.PauseAll(GetKeyState(VK_SHIFT) < 0);
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then FAria2.PurgeDownloadResult;
         IDServerOptions: MessageDlg(JsonToStr(FAria2.GetGlobalOptions.Raw), 'Aria2 options', MB_ICONINFORMATION);
-        IDShutdownServer: FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
+        IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
         IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
       end;
     except
@@ -500,6 +503,7 @@ begin
   FreeAndNil(TrayIcon);
   FreeAndNil(MainMenu);
   FreeAndNil(TrayMenu);
+  FreeAndNil(TransfersMenu);
   Finalize(FTransferColumns);
   FreeAndNil(FTransferIcons);
   FreeAndNil(FTBImages);
@@ -716,8 +720,14 @@ begin
 end;
 
 function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
+var
+  Status: TAria2Struct;
 begin
-  Result := FAria2.Remove(GID, LongBool(Param)) = GID;
+  Status := FAria2.TellStatus(GID, [sfStatus]);
+  if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
+    Result := FAria2.Remove(GID, LongBool(Param)) = GID
+  else
+    Result := FAria2.RemoveDownloadResult(GID);
 end;
 
 function TMainForm.ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
@@ -747,6 +757,16 @@ begin
 end;
 
 function TMainForm.GetColumnValue(List: TAria2Struct; FType: TTransferFieldType; const Field: string): string;
+
+  function GetPercent(N, Q: Int64): string;
+  begin
+    Result := FloatToStr2(100 * N / Q, 1, 2);
+    if Result = 'Nan' then
+      Result := '-'
+    else
+      Result := Result + '%';
+  end;
+
 begin
   case FType of
     tftString: Result := List[Field];
@@ -759,15 +779,15 @@ begin
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
                    Result := Result + '; seeding';
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := '; verifying';
+                   Result := Result + '; verifying (' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ')';
                  if List[sfErrorMessage] <> '' then
                    Result := Result + ' (' + List[sfErrorMessage] + ')';
                end;
     tftSize: Result := SizeToStr(List.Int64[Field]);
     tftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
-    tftPercent: Result := FloatToStr2(100 * List.Int64[First(Field)] / List.Int64[Second(Field)], 1, 2) + '%';
+    tftPercent: Result := GetPercent(List.Int64[First(Field)], List.Int64[Second(Field)]);
     tftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
-  end
+  end;
 end;
 
 procedure TMainForm.UpdateTransfers(List: TAria2Struct);
@@ -887,6 +907,12 @@ begin
       Sleep(5000);
     end;
   end;
+end;
+
+procedure TMainForm.WMContextMenu(var Msg: TWMContextMenu);
+begin
+  if Assigned(TransfersList) and (Msg.hWnd = TransfersList.Handle) then
+    TransfersMenu.Popup(Msg.XPos, Msg.YPos);
 end;
 
 end.
