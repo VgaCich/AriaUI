@@ -83,12 +83,12 @@ end;
 
 procedure TAddForm.FormShow(Sender: TObject);
 begin
-  if FileName.Visible then
+  if FileName.Enabled then
   begin
     FileName.SetFocus;
     FileName.SelectAll;
   end;
-  if MURLs.Visible then
+  if MURLs.Enabled then
   begin
     MURLs.SetFocus;
     MURLs.Perform(EM_SETSEL, 0, -1);
@@ -146,8 +146,11 @@ begin
   FHandler := Handler;
   LName.Caption := LNameCaption[AddFile];
   FileName.Visible := AddFile;
+  FileName.Enabled := AddFile;
   BtnBrowse.Visible := AddFile;
+  BtnBrowse.Enabled := AddFile;
   MURLs.Visible := not AddFile;
+  MURLs.Enabled := not AddFile;
   ShowModal;
 end;
 

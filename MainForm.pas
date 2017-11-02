@@ -15,6 +15,19 @@ type
     FType: TTransferFieldType;
     Field: string;
   end;
+  TUpdateThread = class(TThread)
+  private
+    FAria2: TAria2;
+    FHandler: TThreadMethod;
+    FTransferKeys: array of string;
+  protected
+    procedure Execute; override;
+  public
+    Stats, Active, Waiting, Stopped: TAria2Struct;
+    Names: TStringList;
+    constructor Create(Aria2: TAria2; Handler: TThreadMethod; TransferKeys: array of string);
+    destructor Destroy; override;
+  end;
   TMainForm = class(TForm)
     Settings: TSettings;
     MainMenu, TrayMenu: TMenu;
@@ -29,10 +42,9 @@ type
     FMinWidth, FMinHeight: Integer;
     FAccelTable: HAccel;
     FTBImages, FTransferIcons: TImageList;
-    FRefreshTimer: TTimer;
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
-    FTransferKeys: array of string;
+    FUpdateThread: TUpdateThread;
     FTransferColumns: array of TTransferColumn;
     FTransfersUpdate: record
       Item: Integer;
@@ -42,19 +54,24 @@ type
     procedure AddTorrent(Sender: TObject);
     procedure AddURL(Sender: TObject);
     procedure BeginTransfersUpdate;
+    procedure ClearStatusBar;
+    procedure ClearTransfersList;
     function Confirm(ID: Integer; const Message: string): Boolean;
     procedure EndTransfersUpdate;
     procedure ExitProgram;
     function FormClose(Sender: TObject): Boolean;
+    procedure FormDestroy(Sender: TObject);
+    function FormMinimize(Sender: TObject): Boolean;
     procedure FormResize(Sender: TObject);
     procedure TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     function QueryEndSession(var Msg: TMessages): Boolean;
     function FormProcessMsg(var Msg: TMsg): Boolean;
     function GetGID(Index: Integer): TAria2GID;
+    function GetColumnValue(List: TAria2Struct; FType: TTransferFieldType; const Field: string): string;
     function MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     function PauseTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ProcessSelected(ID: Integer; Handler: TTransferHandler; const Messages: array of string; Param: Integer = 0);
-    procedure Refresh(Sender: TObject);
+    procedure Refresh;
     function RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure UpdateTransfers(List: TAria2Struct);
     procedure RepaintAll;
@@ -169,7 +186,7 @@ const
     (Caption: 'Options...'; ImageIndex: 8),
     (Caption: 'Exit'; ImageIndex: 9));
   TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
-  BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfFiles, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending);
+  BasicTransferKeys: array[0..5] of string = (sfGID, sfBittorrent, {sfFiles,} sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending);
   DefTransferColumns: array[0..9] of TTransferColumn = (
     (Caption: 'Name'; Width: 200; FType: tftName; Field: ''),
     (Caption: 'Size'; Width: 80; FType: tftSize; Field: sfTotalLength),
@@ -211,15 +228,18 @@ constructor TMainForm.Create;
     InsertMenu(MainMenu.Handle, ID, MF_BYCOMMAND or MF_POPUP, Menu.Handle, PChar(Name));
   end;
 
+var
+  Keys: array of string;
+
   procedure AddTransferKey(const Key: string);
   var
     i: Integer;
   begin
     if Key = '' then Exit;
-    for i := 0 to High(FTransferKeys) do
-      if FTransferKeys[i] = Key then Exit;
-    SetLength(FTransferKeys, Length(FTransferKeys) + 1);
-    FTransferKeys[High(FTransferKeys)] := Key;
+    for i := 0 to High(Keys) do
+      if Keys[i] = Key then Exit;
+    SetLength(Keys, Length(Keys) + 1);
+    Keys[High(Keys)] := Key;
   end;
 
 var
@@ -229,7 +249,9 @@ begin
   inherited Create(nil, AppCaption);
   Settings := TSettings.Create(AppName); //TODO: Detect first run and run first start wizard
   Settings.Source := ssIni;
+  OnDestroy := FormDestroy;
   OnClose := FormClose;
+  OnMinimize := FormMinimize;
   OnProcessMsg := FormProcessMsg;
   SetSize(800, 600);
   Position := poScreenCenter;
@@ -281,9 +303,9 @@ begin
   TransfersList.OptionsEx := TransfersList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   TransfersList.SmallImages := FTransferIcons;
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
-  SetLength(FTransferKeys, Length(BasicTransferKeys));
-  for i := 0 to High(FTransferKeys) do
-    FTransferKeys[i] := BasicTransferKeys[i];
+  SetLength(Keys, Length(BasicTransferKeys));
+  for i := 0 to High(Keys) do
+    Keys[i] := BasicTransferKeys[i];
   if Settings.ReadInteger(STransferColumns, SCount, 0) <> 0 then
   begin
     SetLength(FTransferColumns, Settings.ReadInteger(STransferColumns, SCount, 0));
@@ -315,12 +337,10 @@ begin
   OnResize := FormResize;
   FormResize(Self);
   FRequestTransport := TRequestTransport.Create;
-  //FRequestTransport.Connect('localhost', 6800, '', '');
-  //FAria2 := TAria2.Create(FRequestTransport.SendRequest, LoadFile('secret.txt'));
   FAria2 := TAria2.Create(FRequestTransport.SendRequest);
   ServerChange(ServersList);
-  FRefreshTimer := TTimer.CreateEx(1000, true);
-  FRefreshTimer.OnTimer := Refresh;
+  FUpdateThread := TUpdateThread.Create(FAria2, Refresh, Keys);
+  Finalize(Keys);
 end;
 
 procedure TMainForm.TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -473,7 +493,7 @@ end;
 
 destructor TMainForm.Destroy;
 begin
-  FreeAndNil(FRefreshTimer);
+  FreeAndNil(FUpdateThread);
   FreeAndNil(FAria2);
   FreeAndNil(FRequestTransport);
   DestroyAcceleratorTable(FAccelTable);
@@ -481,7 +501,6 @@ begin
   FreeAndNil(MainMenu);
   FreeAndNil(TrayMenu);
   Finalize(FTransferColumns);
-  Finalize(FTransferKeys);
   FreeAndNil(FTransferIcons);
   FreeAndNil(FTBImages);
   FreeAndNil(Settings);
@@ -513,6 +532,23 @@ begin
   FTransfersUpdate.Selected := GetGID(TransfersList.SelectedIndex);
 end;
 
+procedure TMainForm.ClearStatusBar;
+var
+  i: Integer;
+begin
+  for i := Ord(Low(SBParts)) to Ord(High(SBParts)) do
+    StatusBar.SetPartText(i, 0, '');
+end;
+
+procedure TMainForm.ClearTransfersList;
+var
+  i: Integer;
+begin
+  for i := 0 to TransfersList.ItemCount - 1 do
+    FreeMem(PChar(TransfersList.ItemObject[i]));
+  TransfersList.Clear;
+end;
+
 function TMainForm.Confirm(ID: Integer; const Message: string): Boolean;
 begin
   Result := Settings.ReadBool(SDisabledDialogs, IntToStr(ID), false) or (MessageDlg(Message, Caption, MB_ICONQUESTION or MB_YESNO) = ID_YES);
@@ -524,16 +560,19 @@ var
 begin
   while TransfersList.ItemCount > FTransfersUpdate.Item do
   begin
-    FreeMem(PAria2GID(TransfersList.ItemObject[TransfersList.ItemCount - 1]));
+    FreeMem(PChar(TransfersList.ItemObject[TransfersList.ItemCount - 1]));
     TransfersList.ItemDelete(TransfersList.ItemCount - 1);
   end;
-  if (FTransfersUpdate.Selected <> -1) and (GetGID(TransfersList.SelectedIndex) <> FTransfersUpdate.Selected) then
+  if (FTransfersUpdate.Selected <> '') and (TransfersList.SelCount = 1) and (GetGID(TransfersList.SelectedIndex) <> FTransfersUpdate.Selected) then
+  begin
+    TransfersList.ClearSelection;
     for i := 0 to TransfersList.ItemCount - 1 do
       if GetGID(i) = FTransfersUpdate.Selected then
       begin
         TransfersList.SelectedIndex := i;
         Break;
       end;
+  end;
   TransfersList.EndUpdate;
 end;
 
@@ -579,6 +618,19 @@ begin
   end;
 end;
 
+procedure TMainForm.FormDestroy(Sender: TObject);
+begin
+  FUpdateThread.Terminate;
+  FUpdateThread.WaitFor;
+  ClearTransfersList;
+end;
+
+function TMainForm.FormMinimize(Sender: TObject): Boolean;
+begin
+  Result := false;
+  Hide;
+end;
+
 function TMainForm.FormProcessMsg(var Msg: TMsg): Boolean;
 begin
   Result := TranslateAccelerator(Handle, FAccelTable, Msg) <> 0;
@@ -587,9 +639,9 @@ end;
 function TMainForm.GetGID(Index: Integer): TAria2GID;
 begin
   if (Index < 0) or (Index >= TransfersList.ItemCount) then
-    Result := -1
+    Result := ''
   else
-    Result := PAria2GID(TransfersList.ItemObject[Index])^;
+    Result := PChar(TransfersList.ItemObject[Index]);
 end;
 
 function TMainForm.MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
@@ -620,36 +672,33 @@ begin
   end;
 end;
 
-procedure TMainForm.Refresh(Sender: TObject);
-var
-  Stats: TAria2Struct;
-  i: Integer;
+procedure TMainForm.Refresh;
 begin
-  try
-    Stats := FAria2.GetGlobalStats;
-    FRefreshTimer.Interval := 1000; //TODO: lower refresh when minimized
-    StatusBar.SetPartText(Ord(sbConnection), 0, 'OK (Aria2 ' + FAria2.GetVersion + ')');
-  except
-    FRefreshTimer.Interval := 10000;
-    for i := Ord(Low(SBParts)) to Ord(High(SBParts)) do
-      StatusBar.SetPartText(i, 0, '');
+  if not Assigned(FUpdateThread.Stats) then
+  begin
+    ClearStatusBar;
     StatusBar.SetPartText(Ord(sbConnection), 0, 'No connection');
     TrayIcon.ToolTip := Caption + CRLF + 'No connection';
     Exit;
   end;
-  try
-    BeginTransfersUpdate;
-    UpdateTransfers(FAria2.TellActive(FTransferKeys));
-    UpdateTransfers(FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], FTransferKeys));
-    UpdateTransfers(FAria2.TellStopped(0, Stats.Int[sfNumStopped], FTransferKeys));
-    StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
-    StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
-    StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
+  with FUpdateThread do
     TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
       [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
+  if Visible then
+  try
+    StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
+    BeginTransfersUpdate;
+    with FUpdateThread do
+    begin
+      UpdateTransfers(Active);
+      UpdateTransfers(Waiting);
+      UpdateTransfers(Stopped);
+      StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
+      StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
+      StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
+    end;
   finally
     EndTransfersUpdate;
-    FreeAndNil(Stats);
   end;
 end;
 
@@ -666,15 +715,16 @@ end;
 procedure TMainForm.ServerChange(Sender: TObject);
 var
   Section: string;
-  i: Integer;
 begin
   Section := SServer + IntToStr(ServersList.ItemIndex);
-  FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''));
-  FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
   Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
-  for i := 0 to TransfersList.ItemCount - 1 do
-    FreeMem(PAria2GID(TransfersList.ItemObject[i]));
-  TransfersList.Clear;
+  FRequestTransport.Disconnect;
+  FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
+  ClearTransfersList;
+  ClearStatusBar;
+  StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
+  TrayIcon.ToolTip := Caption;
+  FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''));
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
@@ -683,35 +733,35 @@ begin
   ShowMessage(JsonToStr(FAria2.TellStatus(GID, []).Raw));
 end;
 
+function TMainForm.GetColumnValue(List: TAria2Struct; FType: TTransferFieldType; const Field: string): string;
+begin
+  case FType of
+    tftString: Result := List[Field];
+    tftName: if List.Has[sfBittorrent] then
+               Result := List[sfBTName]
+             else
+               Result := FUpdateThread.Names.Values[List[sfGID]];
+    tftStatus: begin
+                 Result := List[sfStatus];
+                 if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
+                   Result := Result + '; seeding';
+                 if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
+                   Result := '; verifying';
+                 if List[sfErrorMessage] <> '' then
+                   Result := Result + ' (' + List[sfErrorMessage] + ')';
+               end;
+    tftSize: Result := SizeToStr(List.Int64[Field]);
+    tftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
+    tftPercent: Result := FloatToStr2(100 * List.Int64[First(Field)] / List.Int64[Second(Field)], 1, 2) + '%';
+    tftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
+  end
+end;
+
 procedure TMainForm.UpdateTransfers(List: TAria2Struct);
-
-  function GetValue(FType: TTransferFieldType; const Field: string): string;
-  begin
-    case FType of
-      tftString: Result := List[Field];
-      tftName: if List.Has[sfBittorrent] then
-                 Result := List[sfBTName]
-               else
-                 Result := ExtractFileName(List[sfFiles + '.0.' + sfPath]);
-      tftStatus: begin
-                   Result := List[sfStatus];
-                   if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-                     Result := Result + '; seeding';
-                   if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                     Result := '; verifying';
-                   if List[sfErrorMessage] <> '' then
-                     Result := Result + ' (' + List[sfErrorMessage] + ')';
-                 end;
-      tftSize: Result := SizeToStr(List.Int64[Field]);
-      tftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
-      tftPercent: Result := FloatToStr2(100 * List.Int64[First(Field)] / List.Int64[Second(Field)], 1, 2) + '%';
-      tftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
-    end
-  end;
-
 var
   i, j, Image: Integer;
-  P: PAria2GID;
+  P: PChar;
+  S: string;
 begin
   for i := 0 to List.Length[''] - 1 do
   begin
@@ -719,21 +769,111 @@ begin
     if FTransfersUpdate.Item >= TransfersList.ItemCount then
     begin
       FTransfersUpdate.Item := TransfersList.ItemAdd('');
-      GetMem(P, SizeOf(TAria2GID));
+      GetMem(P, 32);
       TransfersList.ItemObject[FTransfersUpdate.Item] := TObject(P);
     end;
-    PAria2GID(TransfersList.ItemObject[FTransfersUpdate.Item])^ := StrToGID(List[sfGID]);
+    LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]));
     for j := Low(FTransferColumns) to High(FTransferColumns) do
-      TransfersList.Items[FTransfersUpdate.Item, j] := GetValue(FTransferColumns[j].FType, FTransferColumns[j].Field);
+    begin
+      S := GetColumnValue(List, FTransferColumns[j].FType, FTransferColumns[j].Field);
+      if TransfersList.Items[FTransfersUpdate.Item, j] <> S then
+        TransfersList.Items[FTransfersUpdate.Item, j] := S;
+    end;
     Image := StrToEnum(List[sfStatus], sfStatusValues);
     if (TAria2Status(Image) in [asActive, asWaiting]) and Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
       Inc(Image, 6);
     if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
       Image := 8;
-    TransfersList.ItemImageIndex[FTransfersUpdate.Item] := Image;
+    if TransfersList.ItemImageIndex[FTransfersUpdate.Item] <> Image then
+      TransfersList.ItemImageIndex[FTransfersUpdate.Item] := Image;
     Inc(FTransfersUpdate.Item);
   end;
-  List.Free;
+  //List.Free;
+end;
+
+{ TUpdateThread }
+
+constructor TUpdateThread.Create(Aria2: TAria2; Handler: TThreadMethod; TransferKeys: array of string);
+var
+  i: Integer;
+begin
+  FAria2 := Aria2;
+  FHandler := Handler;
+  SetLength(FTransferKeys, Length(TransferKeys));
+  for i := 0 to High(FTransferKeys) do
+    FTransferKeys[i] := TransferKeys[i];
+  Names := TStringList.Create;
+  inherited Create(false);
+end;
+
+destructor TUpdateThread.Destroy;
+begin
+  FreeAndNil(Names);
+  Finalize(FTransferKeys);
+  inherited;
+end;
+
+procedure TUpdateThread.Execute;
+
+  procedure FetchNames(List: TAria2Struct);
+  var
+    i: Integer;
+    Files: TAria2Struct;
+  begin
+    try
+      for i := 0 to List.Length[''] - 1 do
+      begin
+        List.Index := i;
+        if not List.Has[sfBittorrent] then
+        try
+          Files := FAria2.GetFiles(List[sfGID]);
+          Files.Index := 0;
+          try
+            if Files[sfPath] <> '' then
+              Names.Values[List[sfGID]] := ExtractFileName(Files[sfPath])
+            else
+              Names.Values[List[sfGID]] := ExtractFileName(Files[sfUris + '.0.' + sfUri]);
+          finally
+            FreeAndNil(Files);
+          end;
+        except
+        end;
+      end;
+    finally
+      List.Index := -1;
+    end;
+  end;
+
+begin
+  while not Terminated do
+  begin
+    try
+      Stats := nil;
+      Active := nil;
+      Waiting := nil;
+      Stopped := nil;
+      Stats := FAria2.GetGlobalStats;
+      try
+        Active := FAria2.TellActive(FTransferKeys);
+        Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], FTransferKeys);
+        Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], FTransferKeys);
+        if Names.Count > 100 then Names.Clear;
+        FetchNames(Active);
+        FetchNames(Waiting);
+        FetchNames(Stopped);
+        Synchronize(FHandler);
+      finally
+        FreeAndNil(Stats);
+        FreeAndNil(Active);
+        FreeAndNil(Waiting);
+        FreeAndNil(Stopped);
+      end;
+      Sleep(1000);
+    except
+      Synchronize(FHandler);
+      Sleep(5000);
+    end;
+  end;
 end;
 
 end.
