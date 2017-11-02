@@ -511,18 +511,31 @@ procedure TMainForm.AddMetalink(Sender: TObject);
 var
   Res: TAria2GIDArray;
 begin
-  Res := FAria2.AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options);
-  Finalize(Res);
+  try
+    Res := FAria2.AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options);
+    Finalize(Res);
+  except
+    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+  end;
+
 end;
 
 procedure TMainForm.AddTorrent(Sender: TObject);
 begin
-  FAria2.AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options);
+  try
+    FAria2.AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options);
+  except
+    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+  end;
 end;
 
 procedure TMainForm.AddURL(Sender: TObject);
 begin
-  FAria2.AddUri(FormAdd.URLs, FormAdd.Options);
+  try
+    FAria2.AddUri(FormAdd.URLs, FormAdd.Options);
+  except
+    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+  end;
 end;
 
 procedure TMainForm.BeginTransfersUpdate;

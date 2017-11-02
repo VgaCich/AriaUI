@@ -280,7 +280,7 @@ end;
 function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
 begin
   Result := SendRequestStr('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
-    [MakeStr(Base64Encode(Torrent)), ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
+    ['"' + Base64Encode(Torrent) + '"', ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
 end;
 
 function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GIDArray;
@@ -290,7 +290,7 @@ var
 begin
   Result := nil;
   Res := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
-    [MakeStr(Base64Encode(Metalink)), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
+    ['"' + Base64Encode(Metalink) + '"', OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
   try
     if Res.VType <> jtArray then Exit;
     SetLength(Result, Res.Arr.Length);
@@ -506,7 +506,7 @@ begin
   if not Assigned(FOnRequest) then
     raise Exception.Create('Aria2: no transport provided');
   Id := NewId;
-  Reply := JsonParse(FOnRequest(Self, Format(RequestTemplate, [Id, Method, AddToken(Params)])));
+  Reply := JsonParse(FOnRequest(Self, '{"jsonrpc":"2.0","id":"' + Id + '","method":"' + Method + '","params":[' + AddToken(Params) + ']}'));
   if not Assigned(Reply) then
     raise Exception.Create('Aria2: invalid reply');
   try
