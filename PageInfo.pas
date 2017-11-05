@@ -40,12 +40,6 @@ implementation
 
 { TPieceBar }
 
-procedure TPieceBar.Clear;
-begin
-  PiecesCount := 0;
-  Invalidate;
-end;
-
 constructor TPieceBar.Create(AOwner: TWinControl);
 begin
   inherited;
@@ -59,6 +53,12 @@ begin
   Finalize(FPieces);
   FreeAndNil(FBitmap);
   inherited;
+end;
+
+procedure TPieceBar.Clear;
+begin
+  PiecesCount := 0;
+  Invalidate;
 end;
 
 procedure TPieceBar.Paint;

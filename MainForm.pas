@@ -765,11 +765,11 @@ begin
     tftStatus: begin
                  Result := List[sfStatus];
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-                   Result := Result + '; seeding';
+                   Result := Result + ' [S]';
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := Result + 'verify...';
+                   Result := Result + ' [C]';
                  if List.Has[sfVerifiedLength] then
-                   Result := Result + '; verify (' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ')';
+                   Result := Result + ' [C ' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ']';
                  if List[sfErrorMessage] <> '' then
                    Result := Result + ' (' + List[sfErrorMessage] + ')';
                end;
@@ -811,7 +811,7 @@ begin
     Image := StrToEnum(List[sfStatus], sfStatusValues);
     if (TAria2Status(Image) in [asActive, asWaiting]) and Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
       Inc(Image, 6);
-    if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
+    if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) or List.Has[sfVerifiedLength] then
       Image := 8;
     if TransfersList.ItemImageIndex[FTransfersUpdate.Item] <> Image then
       TransfersList.ItemImageIndex[FTransfersUpdate.Item] := Image;
