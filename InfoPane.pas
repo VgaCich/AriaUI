@@ -3,46 +3,56 @@ unit InfoPane;
 interface
 
 uses
-  Windows, Messages, AvL;
+  Windows, Messages, AvL, Aria2, UpdateThread;
 
 type
   TInfoPane = class;
   TInfoPage = class(TSimplePanel)
   protected
-    //FNode: TDataNode;
+    FGID: TAria2GID;
     FParent: TInfoPane;
+    FUpdateKeys: TStringArray;
     function GetName: string; virtual; abstract;
-    //procedure SetNode(Value: TDataNode); virtual;
+    function GetUpdateKeys: TStringArray; virtual;
+    procedure SetGID(Value: TAria2GID); virtual;
   public
     constructor Create(Parent: TInfoPane); virtual;
+    destructor Destroy; override;
+    procedure Update(UpdateThread: TUpdateThread); virtual; abstract;
     property Name: string read GetName;
-    //property Node: TDataNode read FNode write SetNode;
+    property GID: TAria2GID read FGID write SetGID;
+    property UpdateKeys: TStringArray read GetUpdateKeys;
   end;
   TInfoPane = class(TSimplePanel)
     Tabs: TTabControl;
     Pages: array of TInfoPage;
   private
-    //FNode: TDataNode;
     FCurPage: TInfoPage;
     procedure Resize(Sender: TObject);
-    //procedure SetNode(const Value: TDataNode);
+    function GetUpdateKeys: TStringArray;
+    function GetGID: TAria2GID;
+    procedure SetGID(const Value: TAria2GID);
     procedure TabChange(Sender: TObject);
     procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
   public
     constructor Create(AParent: TWinControl);
-    //property Node: TDataNode read FNode write SetNode;
+    procedure Update(UpdateThread: TUpdateThread);
+    property GID: TAria2GID read GetGID write SetGID;
+    property UpdateKeys: TStringArray read GetUpdateKeys;
   end;
 
 implementation
 
-//uses
-//  TextEditor, ImagesEditor, StreamsEditor;
+uses
+  PageInfo;
+
+//Dummy stuff
 
 var
   DummyNum: Integer = 0;
 
 const
-  DummyPages: array[0..1] of string = ('Info', 'Files');
+  DummyPages: array[0..0] of string = ('Files');
 
 type
   TDummyPage = class(TInfoPage)
@@ -51,12 +61,15 @@ type
     function GetName: string; override;
   public
     constructor Create(Parent: TInfoPane); override;
+    procedure Update(UpdateThread: TUpdateThread); override;
   end;
 
 constructor TDummyPage.Create(Parent: TInfoPane);
 begin
+  inherited;
   FName := DummyPages[DummyNum];
   Inc(DummyNum);
+  SetArray(FUpdateKeys, [sfGID]);
 end;
 
 function TDummyPage.GetName: string;
@@ -64,11 +77,19 @@ begin
   Result := FName;
 end;
 
+procedure TDummyPage.Update(UpdateThread: TUpdateThread);
+begin
+  inherited;
+
+end;
+
+//End of dummy stuff
+
 type
   TInfoPageClass = class of TInfoPage;
 
 const
-  InfoPages: array[0..1] of TInfoPageClass = (TDummyPage, TDummyPage);
+  InfoPages: array[0..1] of TInfoPageClass = (TPageInfo, TDummyPage);
 
 { TInfoPane }
 
@@ -96,6 +117,16 @@ begin
   OnResize := Resize;
 end;
 
+function TInfoPane.GetGID: TAria2GID;
+begin
+  Result := FCurPage.GID;
+end;
+
+function TInfoPane.GetUpdateKeys: TStringArray;
+begin
+  Result := FCurPage.UpdateKeys;
+end;
+
 procedure TInfoPane.Resize(Sender: TObject);
 var
   Rect: TRect;
@@ -111,18 +142,27 @@ begin
     Pages[Page].SetBounds(Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
 end;
 
-{procedure TInfoPane.SetNode(const Value: TDataNode);
+procedure TInfoPane.SetGID(const Value: TAria2GID);
 begin
-  FNode := Value;
-  FCurPage.Node := FNode;
-end;}
+  FCurPage.GID := Value;
+end;
 
 procedure TInfoPane.TabChange(Sender: TObject);
+var
+  GID: TAria2GID;
 begin
+  GID := FCurPage.GID;
   FCurPage.Visible := false;
   FCurPage := Pages[Tabs.TabIndex];
-  //FCurPage.Node := FNode;
+  FCurPage.GID := GID;
   FCurPage.Visible := true;
+end;
+
+procedure TInfoPane.Update(UpdateThread: TUpdateThread);
+begin
+  if Assigned(UpdateThread.Stats) and not Assigned(UpdateThread.Info) then
+    GID := '';
+  FCurPage.Update(UpdateThread);
 end;
 
 procedure TInfoPane.WMNotify(var Msg: TWMNotify);
@@ -141,9 +181,20 @@ begin
   ExStyle := 0;
 end;
 
-{procedure TInfoPage.SetNode(Value: TDataNode);
+destructor TInfoPage.Destroy;
 begin
-  FNode := Value;
-end;}
+  Finalize(FUpdateKeys);
+  inherited;
+end;
+
+function TInfoPage.GetUpdateKeys: TStringArray;
+begin
+  Result := FUpdateKeys;
+end;
+
+procedure TInfoPage.SetGID(Value: TAria2GID);
+begin
+  FGID := Value;
+end;
 
 end.

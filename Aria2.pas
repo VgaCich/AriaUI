@@ -7,9 +7,9 @@ uses
 
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
-  //PAria2GID = ^TAria2GID;
   TAria2GID = string;
   TAria2GIDArray = array of TAria2GID;
+  TStringArray = array of string;
   TAria2PosOrigin = (poFromBeginning, poFromCurrent, poFromEnd);
   TAria2Status = (asActive, asWaiting, asPaused, asError, asComplete, asRemoved);
   TAria2TorrentMode = (atmSingle, atmMulti);
@@ -17,6 +17,7 @@ type
   TAria2Option = record
     Key, Value: string;
   end;
+  TAria2OptionArray = array of TAria2Option;
   TAria2Struct = class
   private
     FIndex: Integer;
@@ -84,9 +85,8 @@ type
     property RPCSecret: string read FRPCSecret write FRPCSecret;
   end;
 
-//function StrToGID(const S: string): TAria2GID;
-//function GIDToStr(GID: TAria2GID): string;
 function StrToEnum(const S: string; const Values: array of string): Integer;
+procedure SetArray(var Dest: TStringArray; const Src: array of string);
 
 const
   sfGID = 'gid';
@@ -145,26 +145,21 @@ const
 
 implementation
 
-{function StrToGID(const S: string): TAria2GID;
-begin
-  Result := StrToInt64('$' + S);
-end;
-
-function GIDToStr(GID: TAria2GID): string;
-var
-  G: packed record Lo, Hi: Integer; end absolute GID;
-begin
-  Result := LowerCase(IntToHex(G.Hi, 8) + IntToHex(G.Lo, 8));
-  while (Length(Result) > 1) and (Result[1] = '0') do
-    Delete(Result, 1, 1);
-end;}
-
 function StrToEnum(const S: string; const Values: array of string): Integer;
 begin
   for Result := Low(Values) to High(Values) do
     if Values[Result] = S then
       Exit;
   Result := 0;
+end;
+
+procedure SetArray(var Dest: TStringArray; const Src: array of string);
+var
+  i: Integer;
+begin
+  SetLength(Dest, Length(Src));
+  for i := 0 to High(Src) do
+    Dest[i] := Src[i];
 end;
 
 function MakeDword(Lo, Hi: Word): Cardinal;

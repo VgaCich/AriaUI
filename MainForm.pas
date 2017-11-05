@@ -4,7 +4,8 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, AddForm, Aria2, RequestTransport, InfoPane;
+  avlListViewEx, avlTrayIcon, avlJSON, AddForm, Aria2, RequestTransport,
+  UpdateThread, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
@@ -14,19 +15,6 @@ type
     Width: Integer;
     FType: TTransferFieldType;
     Field: string;
-  end;
-  TUpdateThread = class(TThread)
-  private
-    FAria2: TAria2;
-    FHandler: TThreadMethod;
-    FTransferKeys: array of string;
-  protected
-    procedure Execute; override;
-  public
-    Stats, Active, Waiting, Stopped: TAria2Struct;
-    Names: TStringList;
-    constructor Create(Aria2: TAria2; Handler: TThreadMethod; TransferKeys: array of string);
-    destructor Destroy; override;
   end;
   TMainForm = class(TForm)
     Settings: TSettings;
@@ -80,7 +68,9 @@ type
     procedure ShowAbout;
     procedure SplitterMove(Sender: TObject);
     function TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
+    procedure UpdateKeys;
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
+    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
     //procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;
     procedure WMSizing(var Msg: TWMMoving); message WM_SIZING;
     procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
@@ -230,18 +220,15 @@ constructor TMainForm.Create;
     InsertMenu(MainMenu.Handle, ID, MF_BYCOMMAND or MF_POPUP, Menu.Handle, PChar(Name));
   end;
 
-var
-  Keys: array of string;
-
   procedure AddTransferKey(const Key: string);
   var
     i: Integer;
   begin
     if Key = '' then Exit;
-    for i := 0 to High(Keys) do
-      if Keys[i] = Key then Exit;
-    SetLength(Keys, Length(Keys) + 1);
-    Keys[High(Keys)] := Key;
+    for i := 0 to High(FUpdateThread.TransfersKeys) do
+      if FUpdateThread.TransfersKeys[i] = Key then Exit;
+    SetLength(FUpdateThread.TransfersKeys, Length(FUpdateThread.TransfersKeys) + 1);
+    FUpdateThread.TransfersKeys[High(FUpdateThread.TransfersKeys)] := Key;
   end;
 
 var
@@ -260,6 +247,11 @@ begin
   Settings.RestoreFormState(ClassName, Self);
   FMinHeight := 300;
   FMinWidth := 400;
+  FRequestTransport := TRequestTransport.Create;
+  FAria2 := TAria2.Create(FRequestTransport.SendRequest);
+  FUpdateThread := TUpdateThread.Create(FAria2);
+  FUpdateThread.OnBeforeUpdate := UpdateKeys;
+  FUpdateThread.OnUpdate := Refresh;
   MainMenu := TMenu.Create(Self, true, ['0']);
   AddMenu(MenuFileCapt, Ord(IDMenuFile), MenuFile);
   AddMenu(MenuTransfersCapt, Ord(IDMenuTransfers), MenuTransfers);
@@ -301,14 +293,12 @@ begin
   Splitter.OnMove := SplitterMove;
   TransfersList := TListViewEx.Create(Self);
   TransfersList.Style := TransfersList.Style and not LVS_SINGLESEL or LVS_SHOWSELALWAYS {or LVS_EDITLABELS} or LVS_NOSORTHEADER; //TODO: switches for sorting & etc
-  //TransfersList.ExStyle := TransfersList.ExStyle or WS_EX_STATICEDGE and not WS_EX_CLIENTEDGE;
   TransfersList.ViewStyle := LVS_REPORT;
   TransfersList.OptionsEx := TransfersList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   TransfersList.SmallImages := FTransferIcons;
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
-  SetLength(Keys, Length(BasicTransferKeys));
-  for i := 0 to High(Keys) do
-    Keys[i] := BasicTransferKeys[i];
+  SetLength(FUpdateThread.TransfersKeys, Length(BasicTransferKeys));
+  SetArray(FUpdateThread.TransfersKeys, BasicTransferKeys);
   if Settings.ReadInteger(STransferColumns, SCount, 0) <> 0 then
   begin
     SetLength(FTransferColumns, Settings.ReadInteger(STransferColumns, SCount, 0));
@@ -339,11 +329,8 @@ begin
   //DragAcceptFiles(Handle, true);
   OnResize := FormResize;
   FormResize(Self);
-  FRequestTransport := TRequestTransport.Create;
-  FAria2 := TAria2.Create(FRequestTransport.SendRequest);
   ServerChange(ServersList);
-  FUpdateThread := TUpdateThread.Create(FAria2, Refresh, Keys);
-  Finalize(Keys);
+  FUpdateThread.Resume;
 end;
 
 procedure TMainForm.TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -424,7 +411,7 @@ begin
         IDResume: ProcessSelected(Ord(IDResume), ResumeTransfer, []);
         IDPause: ProcessSelected(Ord(IDPause), PauseTransfer, [], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
         IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
-        IDProperties: ProcessSelected(Ord(IDProperties), TransferProperties, []);
+        IDProperties: TransferProperties(GetGID(TransfersList.SelectedIndex), 0);//ProcessSelected(Ord(IDProperties), TransferProperties, []);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
         IDResumeAll, IDTrayResumeAll: FAria2.UnpauseAll;
@@ -714,6 +701,7 @@ begin
       StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
       StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
     end;
+    Info.Update(FUpdateThread);
   finally
     EndTransfersUpdate;
   end;
@@ -770,7 +758,7 @@ function TMainForm.GetColumnValue(List: TAria2Struct; FType: TTransferFieldType;
 begin
   case FType of
     tftString: Result := List[Field];
-    tftName: if List.Has[sfBittorrent] then
+    tftName: if List.Has[sfBittorrent] and (List[sfBTName] <> '') then
                Result := List[sfBTName]
              else
                Result := FUpdateThread.Names.Values[List[sfGID]];
@@ -779,7 +767,9 @@ begin
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
                    Result := Result + '; seeding';
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := Result + '; verifying (' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ')';
+                   Result := Result + 'verify...';
+                 if List.Has[sfVerifiedLength] then
+                   Result := Result + '; verify (' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ')';
                  if List[sfErrorMessage] <> '' then
                    Result := Result + ' (' + List[sfErrorMessage] + ')';
                end;
@@ -788,6 +778,12 @@ begin
     tftPercent: Result := GetPercent(List.Int64[First(Field)], List.Int64[Second(Field)]);
     tftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
   end;
+end;
+
+procedure TMainForm.UpdateKeys;
+begin
+  FUpdateThread.InfoGID := Info.GID;
+  FUpdateThread.InfoKeys := Info.UpdateKeys;
 end;
 
 procedure TMainForm.UpdateTransfers(List: TAria2Struct);
@@ -821,98 +817,20 @@ begin
       TransfersList.ItemImageIndex[FTransfersUpdate.Item] := Image;
     Inc(FTransfersUpdate.Item);
   end;
-  //List.Free;
-end;
-
-{ TUpdateThread }
-
-constructor TUpdateThread.Create(Aria2: TAria2; Handler: TThreadMethod; TransferKeys: array of string);
-var
-  i: Integer;
-begin
-  FAria2 := Aria2;
-  FHandler := Handler;
-  SetLength(FTransferKeys, Length(TransferKeys));
-  for i := 0 to High(FTransferKeys) do
-    FTransferKeys[i] := TransferKeys[i];
-  Names := TStringList.Create;
-  inherited Create(false);
-end;
-
-destructor TUpdateThread.Destroy;
-begin
-  FreeAndNil(Names);
-  Finalize(FTransferKeys);
-  inherited;
-end;
-
-procedure TUpdateThread.Execute;
-
-  procedure FetchNames(List: TAria2Struct);
-  var
-    i: Integer;
-    Files: TAria2Struct;
-  begin
-    try
-      for i := 0 to List.Length[''] - 1 do
-      begin
-        List.Index := i;
-        if not List.Has[sfBittorrent] then
-        try
-          Files := FAria2.GetFiles(List[sfGID]);
-          Files.Index := 0;
-          try
-            if Files[sfPath] <> '' then
-              Names.Values[List[sfGID]] := ExtractFileName(Files[sfPath])
-            else
-              Names.Values[List[sfGID]] := ExtractFileName(Files[sfUris + '.0.' + sfUri]);
-          finally
-            FreeAndNil(Files);
-          end;
-        except
-        end;
-      end;
-    finally
-      List.Index := -1;
-    end;
-  end;
-
-begin
-  while not Terminated do
-  begin
-    try
-      Stats := nil;
-      Active := nil;
-      Waiting := nil;
-      Stopped := nil;
-      Stats := FAria2.GetGlobalStats;
-      try
-        Active := FAria2.TellActive(FTransferKeys);
-        Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], FTransferKeys);
-        Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], FTransferKeys);
-        if Names.Count > 100 then Names.Clear;
-        FetchNames(Active);
-        FetchNames(Waiting);
-        FetchNames(Stopped);
-        Synchronize(FHandler);
-      finally
-        FreeAndNil(Stats);
-        FreeAndNil(Active);
-        FreeAndNil(Waiting);
-        FreeAndNil(Stopped);
-      end;
-      Sleep(1000);
-    except
-      Synchronize(FHandler);
-      Sleep(5000);
-    end;
-  end;
 end;
 
 procedure TMainForm.WMContextMenu(var Msg: TWMContextMenu);
 begin
   if Assigned(TransfersList) and (Msg.hWnd = TransfersList.Handle) then
     TransfersMenu.Popup(Msg.XPos, Msg.YPos);
+end;
+
+procedure TMainForm.WMNotify(var Msg: TWMNotify);
+begin
+  inherited;
+  if Assigned(TransfersList) and (PNMHdr(Msg.NMHdr).hwndFrom = TransfersList.Handle) then
+    if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
+      Info.GID := GetGID(PNMListView(Msg.NMHdr).iItem);
 end;
 
 end.
