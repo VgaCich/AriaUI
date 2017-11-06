@@ -9,11 +9,11 @@ uses
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
-  TTransferFieldType = (tftString, tftName, tftStatus, tftSize, tftSpeed, tftPercent, tftETA);
+  TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath);
   TTransferColumn = record
     Caption: string;
     Width: Integer;
-    FType: TTransferFieldType;
+    FType: TFieldType;
     Field: string;
   end;
   TMainForm = class(TForm)
@@ -55,7 +55,6 @@ type
     function QueryEndSession(var Msg: TMessages): Boolean;
     function FormProcessMsg(var Msg: TMsg): Boolean;
     function GetGID(Index: Integer): TAria2GID;
-    function GetColumnValue(List: TAria2Struct; FType: TTransferFieldType; const Field: string): string;
     function MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     function PauseTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ProcessSelected(ID: Integer; Handler: TTransferHandler; const Messages: array of string; Param: Integer = 0);
@@ -83,6 +82,7 @@ var
   FormMain: TMainForm;
 
 const
+  BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
   AppCaption = 'Aria UI';
   AppName = 'AriaUI';
   SServers = 'Servers';
@@ -104,6 +104,8 @@ const
 
 function First(const Pair: string): string;
 function Second(const Pair: string): string;
+function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
+procedure AddTransferKey(var Keys: TStringArray; Field: string);
 
 implementation
 
@@ -177,19 +179,18 @@ const
     (Caption: 'Options...'; ImageIndex: 8),
     (Caption: 'Exit'; ImageIndex: 9));
   TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
-  BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, {sfFiles,} sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
   DefTransferColumns: array[0..10] of TTransferColumn = (
-    (Caption: 'Name'; Width: 200; FType: tftName; Field: ''),
-    (Caption: 'Size'; Width: 80; FType: tftSize; Field: sfTotalLength),
-    (Caption: 'Progress'; Width: 60; FType: tftPercent; Field: sfCompletedLength + ':' + sfTotalLength),
-    (Caption: 'ETA'; Width: 60; FType: tftETA; Field: sfDownloadSpeed + ':' + sfTotalLength + ':' + sfCompletedLength),
-    (Caption: 'Status'; Width: 100; FType: tftStatus; Field: ''),
-    (Caption: 'Uploaded'; Width: 80; FType: tftSize; Field: sfUploadLength),
-    (Caption: 'DL speed'; Width: 80; FType: tftSpeed; Field: sfDownloadSpeed),
-    (Caption: 'UL speed'; Width: 80; FType: tftSpeed; Field: sfUploadSpeed),
-    (Caption: 'Ratio'; Width: 50; FType: tftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
-    (Caption: 'Conns.'; Width: 50; FType: tftString; Field: sfConnections),
-    (Caption: 'Seeds'; Width: 50; FType: tftString; Field: sfNumSeeders));
+    (Caption: 'Name'; Width: 200; FType: ftName; Field: ''),
+    (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfTotalLength),
+    (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfTotalLength),
+    (Caption: 'ETA'; Width: 60; FType: ftETA; Field: sfDownloadSpeed + ':' + sfTotalLength + ':' + sfCompletedLength),
+    (Caption: 'Status'; Width: 100; FType: ftStatus; Field: ''),
+    (Caption: 'Uploaded'; Width: 80; FType: ftSize; Field: sfUploadLength),
+    (Caption: 'DL speed'; Width: 80; FType: ftSpeed; Field: sfDownloadSpeed),
+    (Caption: 'UL speed'; Width: 80; FType: ftSpeed; Field: sfUploadSpeed),
+    (Caption: 'Ratio'; Width: 50; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
+    (Caption: 'Conns.'; Width: 50; FType: ftString; Field: sfConnections),
+    (Caption: 'Seeds'; Width: 50; FType: ftString; Field: sfNumSeeders));
   SBParts: array[TSBPart] of Integer = (100, 250, 400, -1);
 
 var
@@ -210,6 +211,59 @@ begin
   Result := Copy(Pair, FirstDelimiter(':', Pair) + 1, MaxInt);
 end;
 
+function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
+
+  function GetPercent(N, Q: Int64): string;
+  begin
+    Result := FloatToStr2(100 * N / Q, 1, 2);
+    if Result = 'Nan' then
+      Result := '-'
+    else
+      Result := Result + '%';
+  end;
+
+begin
+  case FType of
+    ftNone: Result := '';
+    ftString: Result := List[Field];
+    ftName: if List.Has[sfBittorrent] and (List[sfBTName] <> '') then
+               Result := List[sfBTName]
+             else
+               Result := Names.Values[List[sfGID]];
+    ftStatus: begin
+                 Result := List[sfStatus];
+                 if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
+                   Result := Result + ' [S]';
+                 if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
+                   Result := Result + ' [V]';
+                 if List.Has[sfVerifiedLength] then
+                   Result := Result + ' [V ' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ']';
+                 if List[sfErrorMessage] <> '' then
+                   Result := Result + ' (' + List[sfErrorMessage] + ')';
+               end;
+    ftSize: Result := SizeToStr(List.Int64[Field]);
+    ftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
+    ftPercent: Result := GetPercent(List.Int64[First(Field)], List.Int64[Second(Field)]);
+    ftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
+    ftPath: Result := StringReplace(List[Field], '/', '\', [rfReplaceAll]); 
+  end;
+end;
+
+procedure AddTransferKey(var Keys: TStringArray; Field: string);
+var
+  i: Integer;
+  Key: string;
+begin
+  while Field <> '' do
+  begin
+    Key := Tok(':', Field);
+    for i := 0 to High(Keys) do
+      if Keys[i] = Key then Continue;
+    SetLength(Keys, Length(Keys) + 1);
+    Keys[High(Keys)] := Key;
+  end;
+end;
+
 constructor TMainForm.Create;
 
   procedure AddMenu(const Name: string; ID: Cardinal; const Template: array of PChar);
@@ -220,20 +274,8 @@ constructor TMainForm.Create;
     InsertMenu(MainMenu.Handle, ID, MF_BYCOMMAND or MF_POPUP, Menu.Handle, PChar(Name));
   end;
 
-  procedure AddTransferKey(const Key: string);
-  var
-    i: Integer;
-  begin
-    if Key = '' then Exit;
-    for i := 0 to High(FUpdateThread.TransfersKeys) do
-      if FUpdateThread.TransfersKeys[i] = Key then Exit;
-    SetLength(FUpdateThread.TransfersKeys, Length(FUpdateThread.TransfersKeys) + 1);
-    FUpdateThread.TransfersKeys[High(FUpdateThread.TransfersKeys)] := Key;
-  end;
-
 var
   i: Integer;
-  FTemp: string;
 begin
   inherited Create(nil, AppCaption);
   Settings := TSettings.Create(AppName); //TODO: Detect first run and run first start wizard
@@ -307,7 +349,7 @@ begin
       begin
         Caption := Settings.ReadString(STransferColumns, SCaption + IntToStr(i), '');
         Width := Settings.ReadInteger(STransferColumns, SWidth + IntToStr(i), 0);
-        FType := TTransferFieldType(Settings.ReadInteger(STransferColumns, SType + IntToStr(i), 0));
+        FType := TFieldType(Settings.ReadInteger(STransferColumns, SType + IntToStr(i), 0));
         Field := Settings.ReadString(STransferColumns, SField + IntToStr(i), '');
       end;
   end
@@ -320,9 +362,7 @@ begin
     with FTransferColumns[i] do
     begin
       TransfersList.ColumnAdd(Caption, Width);
-      FTemp := Field;
-      while FTemp <> '' do
-        AddTransferKey(Tok(':', FTemp));
+      AddTransferKey(FUpdateThread.TransfersKeys, Field);
     end;
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
@@ -567,7 +607,7 @@ begin
     FreeMem(PChar(TransfersList.ItemObject[TransfersList.ItemCount - 1]));
     TransfersList.ItemDelete(TransfersList.ItemCount - 1);
   end;
-  if (FTransfersUpdate.Selected <> '') and (TransfersList.SelCount = 1) and (GetGID(TransfersList.SelectedIndex) <> FTransfersUpdate.Selected) then
+  if (FTransfersUpdate.Selected <> '') and (TransfersList.SelCount <= 1) and (GetGID(TransfersList.SelectedIndex) <> FTransfersUpdate.Selected) then
   begin
     TransfersList.ClearSelection;
     for i := 0 to TransfersList.ItemCount - 1 do
@@ -576,6 +616,8 @@ begin
         TransfersList.SelectedIndex := i;
         Break;
       end;
+    if TransfersList.SelCount = 0 then
+      TransfersList.SelectedIndex := 0;
   end;
   TransfersList.EndUpdate;
 end;
@@ -744,42 +786,6 @@ begin
   ShowMessage(JsonToStr(FAria2.TellStatus(GID, []).Raw));
 end;
 
-function TMainForm.GetColumnValue(List: TAria2Struct; FType: TTransferFieldType; const Field: string): string;
-
-  function GetPercent(N, Q: Int64): string;
-  begin
-    Result := FloatToStr2(100 * N / Q, 1, 2);
-    if Result = 'Nan' then
-      Result := '-'
-    else
-      Result := Result + '%';
-  end;
-
-begin
-  case FType of
-    tftString: Result := List[Field];
-    tftName: if List.Has[sfBittorrent] and (List[sfBTName] <> '') then
-               Result := List[sfBTName]
-             else
-               Result := FUpdateThread.Names.Values[List[sfGID]];
-    tftStatus: begin
-                 Result := List[sfStatus];
-                 if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-                   Result := Result + ' [S]';
-                 if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := Result + ' [C]';
-                 if List.Has[sfVerifiedLength] then
-                   Result := Result + ' [C ' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ']';
-                 if List[sfErrorMessage] <> '' then
-                   Result := Result + ' (' + List[sfErrorMessage] + ')';
-               end;
-    tftSize: Result := SizeToStr(List.Int64[Field]);
-    tftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
-    tftPercent: Result := GetPercent(List.Int64[First(Field)], List.Int64[Second(Field)]);
-    tftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
-  end;
-end;
-
 procedure TMainForm.UpdateKeys;
 begin
   FUpdateThread.InfoGID := Info.GID;
@@ -804,7 +810,7 @@ begin
     LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]));
     for j := Low(FTransferColumns) to High(FTransferColumns) do
     begin
-      S := GetColumnValue(List, FTransferColumns[j].FType, FTransferColumns[j].Field);
+      S := GetFieldValue(List, FUpdateThread.Names, FTransferColumns[j].FType, FTransferColumns[j].Field);
       if TransfersList.Items[FTransfersUpdate.Item, j] <> S then
         TransfersList.Items[FTransfersUpdate.Item, j] := S;
     end;

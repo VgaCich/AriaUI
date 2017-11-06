@@ -24,8 +24,9 @@ type
   end;
   TPageInfo = class(TInfoPage)
   private
-    MInfo: TMemo;
+    LPieces: TLabel;
     Pieces: TPieceBar;
+    Labels: array of TLabel;
     FBitfield: string;
     procedure Resize(Sender: TObject);
   protected
@@ -37,6 +38,38 @@ type
   end;
 
 implementation
+
+uses
+  MainForm;
+
+type
+  TLabelFlag = (lfFullRow, lfBold, lfHighlight);
+  TLabelFlags = set of TLabelFlag;
+  
+const
+  ColCount = 3;
+  AdditionalKeys = sfNumPieces + ':' + sfBitfield;
+  //TODO: configure from settings?
+  InfoFields: array[0..18] of record Caption: string; Flags: TLabelFlags; FType: TFieldType; Field: string; end = (
+    (Caption: 'General%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
+    (Caption: 'Name: %s'; Flags: [lfFullRow]; FType: ftName; Field: ''),
+    (Caption: 'Save to: %s'; Flags: [lfFullRow]; FType: ftPath; Field: sfDir),
+    (Caption: 'Comment: %s'; Flags: [lfFullRow]; FType: ftString; Field: sfBTComment),
+    (Caption: 'Total size: %s'; Flags: []; FType: ftSize; Field: sfTotalLength),
+    (Caption: 'GID: %s'; Flags: []; FType: ftString; Field: sfGID),
+    (Caption: 'InfoHash: %s'; Flags: []; FType: ftString; Field: sfInfoHash),
+    (Caption: 'Pieces: %s'; Flags: []; FType: ftString; Field: sfNumPieces),
+    (Caption: 'Piece size: %s'; Flags: []; FType: ftSize; Field: sfPieceLength),
+    (Caption: 'Following: %s'; Flags: []; FType: ftString; Field: sfFollowing),
+    (Caption: '%s'; Flags: []; FType: ftNone; Field: ''),
+    (Caption: 'Transfer%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
+    (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftStatus; Field: ''),
+    (Caption: 'Downloaded: %s'; Flags: []; FType: ftSize; Field: sfCompletedLength),
+    (Caption: 'Uploaded: %s'; Flags: []; FType: ftSize; Field: sfUploadLength),
+    (Caption: 'Ratio: %s'; Flags: []; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
+    (Caption: 'Download speed: %s'; Flags: []; FType: ftSpeed; Field: sfDownloadSpeed),
+    (Caption: 'Upload speed: %s'; Flags: []; FType: ftSpeed; Field: sfUploadSpeed),
+    (Caption: 'Seeders: %s'; Flags: []; FType: ftString; Field: sfNumSeeders));
 
 { TPieceBar }
 
@@ -86,14 +119,28 @@ end;
 { TPageInfo }
 
 constructor TPageInfo.Create(Parent: TInfoPane);
+var
+  i: Integer;
 begin
   inherited;
-  SetArray(FUpdateKeys, [sfGID, sfStatus, sfBitfield, sfInfoHash, sfPieceLength, sfNumPieces, sfErrorMessage, sfFollowedBy, sfFollowing, sfBelongsTo, sfDir, sfBittorrent]);
+  SetArray(FUpdateKeys, BasicTransferKeys);
+  AddTransferKey(FUpdateKeys, AdditionalKeys);
+  LPieces := TLabel.Create(Self, 'Completed');
+  LPieces.SetPosition(5, 5);
+  LPieces.Font.Style := LPieces.Font.Style + [fsBold];
+  LPieces.Color := clSilver;
   Pieces := TPieceBar.Create(Self);
-  Pieces.SetPosition(5, 5);
-  MInfo := TMemo.Create(Self, '');
-  MInfo.Style := MInfo.Style or WS_VSCROLL;
-  MInfo.SetPosition(5, 25);
+  Pieces.SetPosition(5, 20);
+  SetLength(Labels, Length(InfoFields));
+  for i := 0 to High(Labels) do
+  begin
+    Labels[i] := TLabel.Create(Self, Format(InfoFields[i].Caption, ['']));
+    if lfBold in InfoFields[i].Flags then
+      Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
+    if lfHighlight in InfoFields[i].Flags then
+      Labels[i].Color := clSilver;
+    AddTransferKey(FUpdateKeys, InfoFields[i].Field);
+  end;
   OnResize := Resize;
 end;
 
@@ -103,15 +150,44 @@ begin
 end;
 
 procedure TPageInfo.Resize(Sender: TObject);
+var
+  i, Row, Column: Integer;
+  Columns: array[0 .. ColCount] of Integer;
 begin
-  Pieces.SetSize(ClientWidth - 10, 15);
-  MInfo.SetSize(ClientWidth - 10, ClientHeight - 30);
+  LPieces.SetSize(ClientWidth - 10, 15);
+  Pieces.SetSize(ClientWidth - 10, 25);
+  for i := 0 to ColCount do
+    Columns[i] := 5 + Round((ClientWidth - 5) * i / ColCount);
+  Row := Pieces.Top + Pieces.Height + 10;
+  Column := 0;
+  for i := 0 to High(Labels) do
+  begin
+    if (Column = ColCount) or ((lfFullRow in InfoFields[i].Flags) and (Column <> 0)) then
+    begin
+      Inc(Row, 15);
+      Column := 0;
+    end;
+    if lfFullRow in InfoFields[i].Flags then
+    begin
+      Labels[i].SetBounds(Columns[Column], Row, ClientWidth - 10, 15);
+      Column := ColCount - 1;
+      if lfHighlight in InfoFields[i].Flags then
+        Inc(Row, 5);
+    end
+    else
+      Labels[i].SetBounds(Columns[Column], Row, Columns[Column + 1] - Columns[Column] - 5, 15);
+    Inc(Column);
+  end;
 end;
 
 procedure TPageInfo.SetGID(Value: TAria2GID);
+var
+  i: Integer;
 begin
   inherited;
-  
+  Pieces.Clear;
+  for i := 0 to High(Labels) do
+    Labels[i].Caption := Format(InfoFields[i].Caption, ['']);
 end;
 
 procedure TPageInfo.Update(UpdateThread: TUpdateThread);
@@ -122,7 +198,6 @@ begin
   with UpdateThread do
   begin
     if not Assigned(Info) then Exit;
-    MInfo.Text := JsonToStr(Info.Raw);
     if Info.Has[sfNumPieces] and Info.Has[sfBitfield] then
     begin
       if FBitfield = Info[sfBitfield] then goto SkipUpdate;
@@ -146,6 +221,9 @@ begin
       FBitfield := '';
     end;
     SkipUpdate:
+    for i := 0 to High(Labels) do
+      with InfoFields[i] do
+        Labels[i].Caption := Format(Caption, [GetFieldValue(Info, Names, FType, Field)]);
   end;
 end;
 
