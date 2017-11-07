@@ -15,6 +15,7 @@ type
   public
     Stats, Active, Waiting, Stopped, Info: TAria2Struct;
     Names: TStringList;
+    StatsOnly: Boolean;
     InfoGID: TAria2GID;
     TransfersKeys, InfoKeys: TStringArray;
     constructor Create(Aria2: TAria2);
@@ -28,8 +29,6 @@ implementation
 { TUpdateThread }
 
 constructor TUpdateThread.Create(Aria2: TAria2);
-var
-  i: Integer;
 begin
   FAria2 := Aria2;
   Names := TStringList.Create;
@@ -87,20 +86,23 @@ begin
         Synchronize(FOnBeforeUpdate);
       Stats := FAria2.GetGlobalStats;
       try
-        Active := FAria2.TellActive(TransfersKeys);
-        Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], TransfersKeys);
-        Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], TransfersKeys);
-        if InfoGID <> '' then
-        try
-          Info := FAria2.TellStatus(InfoGID, InfoKeys);
-        except
-          Info := nil;
+        if not StatsOnly then
+        begin
+          Active := FAria2.TellActive(TransfersKeys);
+          Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], TransfersKeys);
+          Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], TransfersKeys);
+          if InfoGID <> '' then
+          try
+            Info := FAria2.TellStatus(InfoGID, InfoKeys);
+          except
+            Info := nil;
+          end;
+          if Names.Count > 100 then
+            Names.Clear;
+          FetchNames(Active);
+          FetchNames(Waiting);
+          FetchNames(Stopped);
         end;
-        if Names.Count > 100 then
-          Names.Clear;
-        FetchNames(Active);
-        FetchNames(Waiting);
-        FetchNames(Stopped);
         if Assigned(FOnUpdate) then
           Synchronize(FOnUpdate);
       finally

@@ -3,7 +3,7 @@ unit PageInfo;
 interface
 
 uses
-  Windows, Messages, AvL, avlJSON, InfoPane, Aria2, UpdateThread;
+  Windows, Messages, AvL, InfoPane, Aria2, UpdateThread;
 
 type
   TPieces = array of Boolean;
@@ -124,7 +124,7 @@ var
 begin
   inherited;
   SetArray(FUpdateKeys, BasicTransferKeys);
-  AddTransferKey(FUpdateKeys, AdditionalKeys);
+  AddStatusKey(FUpdateKeys, AdditionalKeys);
   LPieces := TLabel.Create(Self, 'Completed');
   LPieces.SetPosition(5, 5);
   LPieces.Font.Style := LPieces.Font.Style + [fsBold];
@@ -139,7 +139,7 @@ begin
       Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
     if lfHighlight in InfoFields[i].Flags then
       Labels[i].Color := clSilver;
-    AddTransferKey(FUpdateKeys, InfoFields[i].Field);
+    AddStatusKey(FUpdateKeys, InfoFields[i].Field);
   end;
   OnResize := Resize;
 end;
@@ -203,6 +203,7 @@ begin
       if FBitfield = Info[sfBitfield] then goto SkipUpdate;
       Pieces.PiecesCount := Info.Int[sfNumPieces];
       FBitfield := LowerCase(Info[sfBitfield]);
+      Bits := 0;
       for i := 0 to Pieces.PiecesCount - 1 do
       begin
         if i mod 4 = 0 then

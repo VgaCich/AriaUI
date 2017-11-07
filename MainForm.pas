@@ -10,12 +10,14 @@ uses
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
   TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath);
-  TTransferColumn = record
+  TListColumn = record
     Caption: string;
     Width: Integer;
     FType: TFieldType;
     Field: string;
   end;
+  TListColumns = array of TListColumn;
+  TListColumnCallback = procedure(const Column: TListColumn) of object;
   TMainForm = class(TForm)
     Settings: TSettings;
     MainMenu, TrayMenu, TransfersMenu: TMenu;
@@ -33,13 +35,14 @@ type
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
     FUpdateThread: TUpdateThread;
-    FTransferColumns: array of TTransferColumn;
+    FTransferColumns: TListColumns;
     FTransfersUpdate: record
       Item: Integer;
       Selected: TAria2GID;
     end;
     procedure AddMetalink(Sender: TObject);
     procedure AddTorrent(Sender: TObject);
+    procedure AddTransfersKey(const Column: TListColumn);
     procedure AddURL(Sender: TObject);
     procedure BeginTransfersUpdate;
     procedure ClearStatusBar;
@@ -61,7 +64,7 @@ type
     procedure Refresh;
     function RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure UpdateTransfers(List: TAria2Struct);
-    procedure RepaintAll;
+    //procedure RepaintAll;
     function ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ServerChange(Sender: TObject);
     procedure ShowAbout;
@@ -76,6 +79,8 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
+    procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
   end;
 
 var
@@ -105,7 +110,7 @@ const
 function First(const Pair: string): string;
 function Second(const Pair: string): string;
 function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
-procedure AddTransferKey(var Keys: TStringArray; Field: string);
+procedure AddStatusKey(var Keys: TStringArray; Field: string);
 
 implementation
 
@@ -179,7 +184,7 @@ const
     (Caption: 'Options...'; ImageIndex: 8),
     (Caption: 'Exit'; ImageIndex: 9));
   TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
-  DefTransferColumns: array[0..10] of TTransferColumn = (
+  DefTransferColumns: array[0..10] of TListColumn = (
     (Caption: 'Name'; Width: 200; FType: ftName; Field: ''),
     (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfTotalLength),
     (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfTotalLength),
@@ -249,7 +254,7 @@ begin
   end;
 end;
 
-procedure AddTransferKey(var Keys: TStringArray; Field: string);
+procedure AddStatusKey(var Keys: TStringArray; Field: string);
 var
   i: Integer;
   Key: string;
@@ -341,29 +346,7 @@ begin
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
   SetLength(FUpdateThread.TransfersKeys, Length(BasicTransferKeys));
   SetArray(FUpdateThread.TransfersKeys, BasicTransferKeys);
-  if Settings.ReadInteger(STransferColumns, SCount, 0) <> 0 then
-  begin
-    SetLength(FTransferColumns, Settings.ReadInteger(STransferColumns, SCount, 0));
-    for i := 0 to High(FTransferColumns) do
-      with FTransferColumns[i] do
-      begin
-        Caption := Settings.ReadString(STransferColumns, SCaption + IntToStr(i), '');
-        Width := Settings.ReadInteger(STransferColumns, SWidth + IntToStr(i), 0);
-        FType := TFieldType(Settings.ReadInteger(STransferColumns, SType + IntToStr(i), 0));
-        Field := Settings.ReadString(STransferColumns, SField + IntToStr(i), '');
-      end;
-  end
-  else begin
-    SetLength(FTransferColumns, Length(DefTransferColumns));
-    for i := 0 to High(DefTransferColumns) do
-      FTransferColumns[i] := DefTransferColumns[i];
-  end;
-  for i := 0 to High(FTransferColumns) do
-    with FTransferColumns[i] do
-    begin
-      TransfersList.ColumnAdd(Caption, Width);
-      AddTransferKey(FUpdateThread.TransfersKeys, Field);
-    end;
+  LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransfersKey);
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
@@ -371,6 +354,23 @@ begin
   FormResize(Self);
   ServerChange(ServersList);
   FUpdateThread.Resume;
+end;
+
+destructor TMainForm.Destroy;
+begin
+  FreeAndNil(FUpdateThread);
+  FreeAndNil(FAria2);
+  FreeAndNil(FRequestTransport);
+  DestroyAcceleratorTable(FAccelTable);
+  FreeAndNil(TrayIcon);
+  FreeAndNil(MainMenu);
+  FreeAndNil(TrayMenu);
+  FreeAndNil(TransfersMenu);
+  Finalize(FTransferColumns);
+  FreeAndNil(FTransferIcons);
+  FreeAndNil(FTBImages);
+  FreeAndNil(Settings);
+  inherited;
 end;
 
 procedure TMainForm.TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -508,7 +508,7 @@ begin
   end;
 end;
 
-procedure TMainForm.RepaintAll;
+{procedure TMainForm.RepaintAll;
 var
   Cur: TWinControl;
 begin
@@ -519,24 +519,7 @@ begin
     UpdateWindow(Cur.Handle);
     Cur := Cur.NextControl;
   end;
-end;
-
-destructor TMainForm.Destroy;
-begin
-  FreeAndNil(FUpdateThread);
-  FreeAndNil(FAria2);
-  FreeAndNil(FRequestTransport);
-  DestroyAcceleratorTable(FAccelTable);
-  FreeAndNil(TrayIcon);
-  FreeAndNil(MainMenu);
-  FreeAndNil(TrayMenu);
-  FreeAndNil(TransfersMenu);
-  Finalize(FTransferColumns);
-  FreeAndNil(FTransferIcons);
-  FreeAndNil(FTBImages);
-  FreeAndNil(Settings);
-  inherited;
-end;
+end;}
 
 procedure TMainForm.AddMetalink(Sender: TObject);
 var
@@ -558,6 +541,11 @@ begin
   except
     on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
   end;
+end;
+
+procedure TMainForm.AddTransfersKey(const Column: TListColumn);
+begin
+  AddStatusKey(FUpdateThread.TransfersKeys, Column.Field);
 end;
 
 procedure TMainForm.AddURL(Sender: TObject);
@@ -629,9 +617,6 @@ begin
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;
-var
-  Changed: Boolean;
-  i: Integer;
 begin
   Result := not Visible;
   if Visible then
@@ -639,28 +624,67 @@ begin
   else begin
     Settings.SaveFormState(ClassName, Self);
     Settings.WriteInteger(ClassName, SSplitter, Splitter.Top);
-    for i := 0 to High(FTransferColumns) do
-      FTransferColumns[i].Width := TransfersList.ColumnWidth[i];
-    Changed := Length(FTransferColumns) <> Length(DefTransferColumns);
-    if not Changed then
-      for i := 0 to High(FTransferColumns) do
-        if (FTransferColumns[i].Caption <> DefTransferColumns[i].Caption) or
-           (FTransferColumns[i].Width <> DefTransferColumns[i].Width) or
-           (FTransferColumns[i].FType <> DefTransferColumns[i].FType) or
-           (FTransferColumns[i].Field <> DefTransferColumns[i].Field) then
-          Changed := true;
-    if Changed then
+    SaveListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns);
+    Info.SaveSettings;
+  end;
+end;
+
+procedure TMainForm.LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
+var
+  i: Integer;
+begin
+  if Settings.ReadInteger(Section, SCount, 0) <> 0 then
+  begin
+    SetLength(Columns, Settings.ReadInteger(Section, SCount, 0));
+    for i := 0 to High(Columns) do
+      with Columns[i] do
+      begin
+        Caption := Settings.ReadString(Section, SCaption + IntToStr(i), '');
+        Width := Settings.ReadInteger(Section, SWidth + IntToStr(i), 0);
+        FType := TFieldType(Settings.ReadInteger(Section, SType + IntToStr(i), 0));
+        Field := Settings.ReadString(Section, SField + IntToStr(i), '');
+      end;
+  end
+  else begin
+    SetLength(Columns, Length(DefColumns));
+    for i := 0 to High(DefColumns) do
+      Columns[i] := DefColumns[i];
+  end;
+  for i := 0 to High(Columns) do
+    with Columns[i] do
     begin
-      Settings.WriteInteger(STransferColumns, SCount, Length(FTransferColumns));
-      for i := 0 to High(FTransferColumns) do
-        with FTransferColumns[i] do
-        begin
-          Settings.WriteString(STransferColumns, SCaption + IntToStr(i), Caption);
-          Settings.WriteInteger(STransferColumns, SWidth + IntToStr(i), Width);
-          Settings.WriteInteger(STransferColumns, SType + IntToStr(i), Ord(FType));
-          Settings.WriteString(STransferColumns, SField + IntToStr(i), Field);
-        end;
+      List.ColumnAdd(Caption, Width);
+      if Assigned(Callback) then
+        Callback(Columns[i]);
     end;
+end;
+
+procedure TMainForm.SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
+var
+  i: Integer;
+  Changed: Boolean;
+begin
+  for i := 0 to High(Columns) do
+    Columns[i].Width := List.ColumnWidth[i];
+  Changed := Length(Columns) <> Length(DefColumns);
+  if not Changed then
+    for i := 0 to High(Columns) do
+      if (Columns[i].Caption <> DefColumns[i].Caption) or
+         (Columns[i].Width <> DefColumns[i].Width) or
+         (Columns[i].FType <> DefColumns[i].FType) or
+         (Columns[i].Field <> DefColumns[i].Field) then
+        Changed := true;
+  if Changed then
+  begin
+    Settings.WriteInteger(Section, SCount, Length(Columns));
+    for i := 0 to High(Columns) do
+      with Columns[i] do
+      begin
+        Settings.WriteString(Section, SCaption + IntToStr(i), Caption);
+        Settings.WriteInteger(Section, SWidth + IntToStr(i), Width);
+        Settings.WriteInteger(Section, SType + IntToStr(i), Ord(FType));
+        Settings.WriteString(Section, SField + IntToStr(i), Field);
+      end;
   end;
 end;
 
@@ -736,9 +760,12 @@ begin
     BeginTransfersUpdate;
     with FUpdateThread do
     begin
-      UpdateTransfers(Active);
-      UpdateTransfers(Waiting);
-      UpdateTransfers(Stopped);
+      if Assigned(Active) then
+        UpdateTransfers(Active);
+      if Assigned(Waiting) then
+        UpdateTransfers(Waiting);
+      if Assigned(Stopped) then
+        UpdateTransfers(Stopped);
       StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
       StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
       StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
@@ -788,6 +815,7 @@ end;
 
 procedure TMainForm.UpdateKeys;
 begin
+  FUpdateThread.StatsOnly := not Visible;
   FUpdateThread.InfoGID := Info.GID;
   FUpdateThread.InfoKeys := Info.UpdateKeys;
 end;

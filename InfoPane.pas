@@ -19,6 +19,7 @@ type
     constructor Create(Parent: TInfoPane); virtual;
     destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); virtual; abstract;
+    procedure SaveSettings; virtual;
     property Name: string read GetName;
     property GID: TAria2GID read FGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
@@ -37,6 +38,7 @@ type
   public
     constructor Create(AParent: TWinControl);
     procedure Update(UpdateThread: TUpdateThread);
+    procedure SaveSettings;
     property GID: TAria2GID read GetGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
   end;
@@ -44,52 +46,13 @@ type
 implementation
 
 uses
-  PageInfo;
-
-//Dummy stuff
-
-var
-  DummyNum: Integer = 0;
-
-const
-  DummyPages: array[0..0] of string = ('Files');
-
-type
-  TDummyPage = class(TInfoPage)
-  private
-    FName: string;
-    function GetName: string; override;
-  public
-    constructor Create(Parent: TInfoPane); override;
-    procedure Update(UpdateThread: TUpdateThread); override;
-  end;
-
-constructor TDummyPage.Create(Parent: TInfoPane);
-begin
-  inherited;
-  FName := DummyPages[DummyNum];
-  Inc(DummyNum);
-  SetArray(FUpdateKeys, [sfGID]);
-end;
-
-function TDummyPage.GetName: string;
-begin
-  Result := FName;
-end;
-
-procedure TDummyPage.Update(UpdateThread: TUpdateThread);
-begin
-  inherited;
-
-end;
-
-//End of dummy stuff
+  PageInfo, PageFiles;
 
 type
   TInfoPageClass = class of TInfoPage;
 
 const
-  InfoPages: array[0..1] of TInfoPageClass = (TPageInfo, TDummyPage);
+  InfoPages: array[0..1] of TInfoPageClass = (TPageInfo, TPageFiles);
 
 { TInfoPane }
 
@@ -142,6 +105,14 @@ begin
     Pages[Page].SetBounds(Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
 end;
 
+procedure TInfoPane.SaveSettings;
+var
+  i: Integer;
+begin
+  for i := 0 to High(Pages) do
+    Pages[i].SaveSettings;
+end;
+
 procedure TInfoPane.SetGID(const Value: TAria2GID);
 begin
   FCurPage.GID := Value;
@@ -190,6 +161,11 @@ end;
 function TInfoPage.GetUpdateKeys: TStringArray;
 begin
   Result := FUpdateKeys;
+end;
+
+procedure TInfoPage.SaveSettings;
+begin
+
 end;
 
 procedure TInfoPage.SetGID(Value: TAria2GID);
