@@ -69,6 +69,7 @@ type
     procedure ServerChange(Sender: TObject);
     procedure ShowAbout;
     procedure SplitterMove(Sender: TObject);
+    procedure TransferDblClick(Sender: TObject);
     function TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
     procedure UpdateKeys;
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
@@ -344,6 +345,7 @@ begin
   TransfersList.OptionsEx := TransfersList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   TransfersList.SmallImages := FTransferIcons;
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
+  TransfersList.OnDblClick := TransferDblClick;
   SetLength(FUpdateThread.TransfersKeys, Length(BasicTransferKeys));
   SetArray(FUpdateThread.TransfersKeys, BasicTransferKeys);
   LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransfersKey);
@@ -865,6 +867,29 @@ begin
   if Assigned(TransfersList) and (PNMHdr(Msg.NMHdr).hwndFrom = TransfersList.Handle) then
     if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
       Info.GID := GetGID(PNMListView(Msg.NMHdr).iItem);
+end;
+
+procedure TMainForm.TransferDblClick(Sender: TObject);
+var
+  Status: TAria2Struct;
+  Dir: string;
+begin
+  //TODO: setting "transfer dblclick action"
+  if TransfersList.SelectedIndex < 0 then Exit;
+  try
+    Status := FAria2.TellStatus(GetGID(TransfersList.SelectedIndex), [sfDir]);
+    try
+      Dir := StringReplace(Status[sfDir], '/', '\', [rfReplaceAll]);
+      if DirectoryExists(Dir) then
+        Execute(Dir)
+      else
+        raise Exception.Create('Directory "' + Dir + '" not found');
+    finally
+      FreeAndNil(Status);
+    end;
+  except
+    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+  end;
 end;
 
 end.
