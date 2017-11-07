@@ -21,6 +21,7 @@ type
   TAria2Struct = class
   private
     FIndex: Integer;
+    FRoot: string;
     FJson: PJsonValue;
     function Find(Name: string): PJsonValue;
     function GetLength(const Name: string): Integer;
@@ -34,6 +35,7 @@ type
     destructor Destroy; override;
     property Raw: PJsonValue read FJson;
     property Index: Integer read FIndex write FIndex;
+    property Root: string read FRoot write FRoot;
     property Has[const Name: string]: Boolean read Exists;
     property Length[const Name: string]: Integer read GetLength;
     property Str[const Name: string]: string read GetStr; default;
@@ -538,6 +540,7 @@ constructor TAria2Struct.Create(Json: PJsonValue);
 begin
   inherited Create;
   FIndex := -1;
+  FRoot := '';
   FJson := Json;
 end;
 
@@ -554,10 +557,12 @@ end;
 
 function TAria2Struct.Find(Name: string): PJsonValue;
 begin
-  if FIndex < 0 then
+  if (FRoot = '') or (Name = FRoot) then
     Result := FJson
   else
-    Result := JsonItem(FJson, FIndex);
+    Result := Find(FRoot);
+  if (FIndex >= 0) and (Name <> FRoot) then 
+    Result := JsonItem(Result, FIndex);
   while Assigned(Result) and (Name <> '') do
     if Result.VType = jtArray then
       Result := JsonItem(Result, StrToInt(Tok('.', Name)))
