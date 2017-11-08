@@ -97,7 +97,7 @@ begin
           except
             Info := nil;
           end;
-          if Names.Count > 100 then
+          if Names.Count > 500 then
             Names.Clear;
           FetchNames(Active);
           FetchNames(Waiting);

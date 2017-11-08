@@ -45,6 +45,7 @@ type
     procedure AddTransfersKey(const Column: TListColumn);
     procedure AddURL(Sender: TObject);
     procedure BeginTransfersUpdate;
+    function CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
     procedure ClearStatusBar;
     procedure ClearTransfersList;
     function Confirm(ID: Integer; const Message: string): Boolean;
@@ -82,6 +83,7 @@ type
     destructor Destroy; override;
     procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
     procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
+    property Aria2: TAria2 read FAria2;
   end;
 
 var
@@ -119,7 +121,7 @@ type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
   TSBPart = (sbConnection, sbDownSpeed, sbUpSpeed, sbStats);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDFileSep0, IDExit,
-             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
+             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
              IDMenuServer = 3000, IDServerOptions, IDShutdownServer, IDServerVersion,
              IDMenuHelp = 5000, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
@@ -140,11 +142,12 @@ const
     '-',
     'E&xit'#9'Alt-X');
   MenuTransfersCapt = '&Transfers';
-  MenuTransfers: array[0..11] of PChar = ('2001',
+  MenuTransfers: array[0..12] of PChar = ('2001',
     '&Resume',
     '&Pause',
     'R&emove',
     'Pr&operties...',
+    'Check &integrity',
     '-',
     'Move &up',
     'Move &down',
@@ -243,7 +246,7 @@ begin
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
                    Result := Result + ' [V]';
                  if List.Has[sfVerifiedLength] then
-                   Result := Result + ' [V ' + GetPercent(List.Int64[sfVerifiedLength], List.Int64[sfTotalLength]) + ']';
+                   Result := Result + ' [V: ' + SizeToStr(List.Int64[sfVerifiedLength]) + ']';
                  if List[sfErrorMessage] <> '' then
                    Result := Result + ' (' + List[sfErrorMessage] + ')';
                end;
@@ -320,6 +323,7 @@ begin
   FTransferIcons := TImageList.Create;
   FTransferIcons.AddMasked(LoadImage(hInstance, 'TLICONS', IMAGE_BITMAP, 0, 0, 0), clFuchsia);
   ServersList := TComboBox.Create(Self, csDropDownList);
+  ServersList.Hint := 'Select server';
   for i := 0 to Settings.ReadInteger(SServers, SCount, 0) - 1 do
     ServersList.ItemAdd(Settings.ReadString(SServers, IntToStr(i), '###'));
   ServersList.ItemIndex := Settings.ReadInteger(SServers, SCurrent, 0);
@@ -329,7 +333,7 @@ begin
   ToolBar.ExStyle := ToolBar.ExStyle or TBSTYLE_EX_MIXEDBUTTONS;
   ToolBar.Perform(TB_SETMAXTEXTROWS, 0, 0);
   ToolBar.Perform(TB_AUTOSIZE, 0, 0);
-  Toolbar.Indent := 100;
+  Toolbar.Indent := 120;
   ToolBar.Images := FTBImages;
   for i := Low(TBButtons) to High(TBButtons) do
     ToolBar.ButtonAdd(TBButtons[i].Caption, TBButtons[i].ImageIndex);
@@ -454,6 +458,7 @@ begin
         IDPause: ProcessSelected(Ord(IDPause), PauseTransfer, [], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
         IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
         IDProperties: TransferProperties(GetGID(TransfersList.SelectedIndex), 0);//ProcessSelected(Ord(IDProperties), TransferProperties, []);
+        IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
         IDResumeAll, IDTrayResumeAll: FAria2.UnpauseAll;
@@ -564,6 +569,13 @@ begin
   TransfersList.BeginUpdate;
   FTransfersUpdate.Item := 0;
   FTransfersUpdate.Selected := GetGID(TransfersList.SelectedIndex);
+end;
+
+function TMainForm.CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
+const
+  Option: TAria2Option = (Key: soCheckIntegrity; Value: svTrue);
+begin
+  Result := FAria2.ChangeOptions(GID, [Option]);
 end;
 
 procedure TMainForm.ClearStatusBar;

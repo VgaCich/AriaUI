@@ -1,6 +1,6 @@
 unit PageFiles;
 
-//TODO: context menu (+refresh) and hotkeys, file selection, file renaming, sorting
+//TODO: hotkeys, file renaming, sorting
 
 interface
 
@@ -8,15 +8,20 @@ uses
   Windows, Messages, AvL, avlUtils, avlListViewEx, InfoPane, Aria2, UpdateThread, MainForm;
 
 type
+  TChangeSelection = (csAdd, csRemove, csInvert);
   TPageFiles = class(TInfoPage)
   private
     FFilesColumns: TListColumns;
     FFilesIcons: TImageList;
     FDir: string;
     FilesList: TListViewEx;
+    FilesMenu: TMenu;
+    procedure ChangeSelection(Action: TChangeSelection);
     procedure Refresh;
     procedure Resize(Sender: TObject);
     procedure FilesDblClick(Sender: TObject);
+    procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
+    procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
   protected
     function GetName: string; override;
     procedure SetGID(Value: TAria2GID); override;
@@ -32,6 +37,9 @@ const
 
 implementation
 
+type
+  TMenuID = (IDMenuFiles = 20000, IDRefresh, IDSelectAll, IDFilesSep0, IDOpen, IDOpenFolder, IDFilesSep1, IDSelect, IDDeselect, IDInvertSelection);
+
 const
   DefFilesColumns: array[0..4] of TListColumn = (
     (Caption: 'Name'; Width: 500; FType: ftPath; Field: sfPath),
@@ -39,6 +47,16 @@ const
     (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfLength),
     (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfLength),
     (Caption: 'Selected'; Width: 60; FType: ftString; Field: sfSelected));
+  MenuFiles: array[0..9] of PChar = ('20001',
+    '&Refresh',
+    'Select &all',
+    '-',
+    '&Open',
+    'Open &folder',
+    '-',
+    '&Select',
+    '&Deselect',
+    '&Invert selection');
 
 { TPageFiles }
 
@@ -46,6 +64,7 @@ constructor TPageFiles.Create(Parent: TInfoPane);
 begin
   inherited;
   SetArray(FUpdateKeys, [sfGID]);
+  FilesMenu := TMenu.Create(Self, false, MenuFiles);
   FFilesIcons := TImageList.Create;
   FFilesIcons.LoadSystemIcons(true);
   FilesList := TListViewEx.Create(Self);
@@ -67,9 +86,53 @@ begin
   inherited;
 end;
 
-function TPageFiles.GetName: string;
+procedure TPageFiles.ChangeSelection(Action: TChangeSelection);
+var
+  i, Start: Integer;
+  Selection: array of Boolean;
+  Files: TAria2Struct;
+  Option: TAria2Option;
 begin
-  Result := 'Files';
+  Files := (FParent.Parent as TMainForm).Aria2.GetFiles(FGID);
+  try
+    SetLength(Selection, Files.Length['']);
+    try
+      for i := 0 to High(Selection) do
+      begin
+        Files.Index := i;
+        Selection[i] := Boolean(StrToEnum(Files[sfSelected], sfBoolValues));
+      end;
+      if Action in [csAdd, csRemove] then
+        for i := 0 to FilesList.SelCount - 1 do
+          Selection[Integer(FilesList.ItemObject[FilesList.Selected[i]])] := Action = csAdd
+      else
+        for i := 0 to High(Selection) do
+          Selection[i] := not Selection[i];
+      Option.Key := soSelectFile;
+      Start := -1;
+      for i := 0 to High(Selection) do
+        if Selection[i] and (Start < 0)then
+          Start := i
+        else if not Selection[i] and (Start >= 0) then
+        begin
+          if i = Start - 1 then
+            Option.Value := Option.Value + IntToStr(i) + ','
+          else
+            Option.Value := Option.Value + IntToStr(Start + 1) + '-' + IntToStr(i) + ',';
+          Start := -1;
+        end;
+      if Start >= 0 then
+        Option.Value := Option.Value + IntToStr(Start + 1) + '-' + IntToStr(Length(Selection)) + ',';
+      if Option.Value <> '' then
+        Delete(Option.Value, Length(Option.Value), 1);
+      (FParent.Parent as TMainForm).Aria2.ChangeOptions(FGID, [Option]);
+      Refresh;
+    finally
+      Finalize(Selection);
+    end;
+  finally
+    FreeAndNil(Files);
+  end;
 end;
 
 procedure TPageFiles.Refresh;
@@ -84,22 +147,60 @@ end;
 
 procedure TPageFiles.FilesDblClick(Sender: TObject);
 begin
-  if FileExists(AddTrailingBackslash(FDir) + FilesList.SelectedCaption) then
-    Execute(AddTrailingBackslash(FDir) + FilesList.SelectedCaption)
-  else
-    MessageDlg('File "' + FilesList.SelectedCaption + '" not found', 'Error', MB_ICONERROR);
+  Perform(WM_COMMAND, MakeWParam(Ord(IDOpen), 0), 0);
 end;
 
-procedure TPageFiles.SaveSettings;
+procedure TPageFiles.WMCommand(var Msg: TWMCommand);
+var
+  Dir: string;
 begin
-  inherited;
-  FormMain.SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
+  if (Msg.Ctl = 0) and (Msg.NotifyCode in [0, 1]) then
+    try
+      case TMenuID(Msg.ItemID) of
+        IDRefresh: Refresh;
+        IDSelectAll: FilesList.SelectAll;
+        IDOpen: if FileExists(AddTrailingBackslash(FDir) + FilesList.SelectedCaption) then
+                  Execute(AddTrailingBackslash(FDir) + FilesList.SelectedCaption)
+                else
+                  Exception.Create('File "' + FilesList.SelectedCaption + '" not found');
+        IDOpenFolder:
+        begin
+          Dir := ExtractFilePath(AddTrailingBackslash(FDir) + FilesList.SelectedCaption);
+          if DirectoryExists(Dir) then
+            Execute(Dir)
+          else
+            Exception.Create('Directory "' + Dir + '" not found');
+        end;
+        IDSelect: ChangeSelection(csAdd);
+        IDDeselect: ChangeSelection(csRemove);
+        IDInvertSelection: ChangeSelection(csInvert);
+      end;
+    except
+      on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+    end;
+end;
+
+procedure TPageFiles.WMContextMenu(var Msg: TWMContextMenu);
+begin
+  if Assigned(FilesList) and (Msg.hWnd = FilesList.Handle) then
+    FilesMenu.Popup(Msg.XPos, Msg.YPos);
+end;
+
+function TPageFiles.GetName: string;
+begin
+  Result := 'Files';
 end;
 
 procedure TPageFiles.SetGID(Value: TAria2GID);
 begin
   inherited;
   Refresh;
+end;
+
+procedure TPageFiles.SaveSettings;
+begin
+  inherited;
+  FormMain.SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
 end;
 
 procedure TPageFiles.Update(UpdateThread: TUpdateThread);
@@ -132,6 +233,7 @@ begin
       begin
         Info.Index := i;
         Item := FilesList.ItemAdd(GetValue(0));
+        FilesList.ItemObject[Item] := TObject(StrToInt(Info[sfIndex]) - 1);
         FilesList.ItemImageIndex[Item] := FileIconIndex(ExtractFileName(Info[sfPath]), false);
         for j := 1 to High(FFilesColumns) do
           FilesList.Items[Item, j] := GetValue(j);

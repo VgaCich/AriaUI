@@ -28,6 +28,7 @@ type
     Pieces: TPieceBar;
     Labels: array of TLabel;
     FBitfield: string;
+    procedure LabelMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure Resize(Sender: TObject);
   protected
     function GetName: string; override;
@@ -138,7 +139,11 @@ begin
     if lfBold in InfoFields[i].Flags then
       Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
     if lfHighlight in InfoFields[i].Flags then
-      Labels[i].Color := clSilver;
+      Labels[i].Color := clSilver
+    else begin
+      Labels[i].Hint := 'Right click for copy';
+      Labels[i].OnMouseUp := LabelMouseUp;
+    end;
     AddStatusKey(FUpdateKeys, InfoFields[i].Field);
   end;
   OnResize := Resize;
@@ -147,6 +152,12 @@ end;
 function TPageInfo.GetName: string;
 begin
   Result := 'Info';
+end;
+
+procedure TPageInfo.LabelMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbRight then
+    SetClipboardText((Sender as TWinControl).TagEx);
 end;
 
 procedure TPageInfo.Resize(Sender: TObject);
@@ -224,7 +235,10 @@ begin
     SkipUpdate:
     for i := 0 to High(Labels) do
       with InfoFields[i] do
-        Labels[i].Caption := Format(Caption, [GetFieldValue(Info, Names, FType, Field)]);
+      begin
+        Labels[i].TagEx := GetFieldValue(Info, Names, FType, Field);
+        Labels[i].Caption := Format(Caption, [Labels[i].TagEx]);
+      end;
   end;
 end;
 
