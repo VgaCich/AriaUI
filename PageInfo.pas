@@ -54,6 +54,7 @@ const
   InfoFields: array[0..18] of record Caption: string; Flags: TLabelFlags; FType: TFieldType; Field: string; end = (
     (Caption: 'General%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
     (Caption: 'Name: %s'; Flags: [lfFullRow]; FType: ftName; Field: ''),
+    (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftLongStatus; Field: ''),
     (Caption: 'Save to: %s'; Flags: [lfFullRow]; FType: ftPath; Field: sfDir),
     (Caption: 'Comment: %s'; Flags: [lfFullRow]; FType: ftString; Field: sfBTComment),
     (Caption: 'Total size: %s'; Flags: []; FType: ftSize; Field: sfTotalLength),
@@ -64,7 +65,6 @@ const
     (Caption: 'Following: %s'; Flags: []; FType: ftString; Field: sfFollowing),
     (Caption: '%s'; Flags: []; FType: ftNone; Field: ''),
     (Caption: 'Transfer%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
-    (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftLongStatus; Field: ''),
     (Caption: 'Downloaded: %s'; Flags: []; FType: ftSize; Field: sfCompletedLength),
     (Caption: 'Uploaded: %s'; Flags: []; FType: ftSize; Field: sfUploadLength),
     (Caption: 'Ratio: %s'; Flags: []; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
