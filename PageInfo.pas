@@ -195,6 +195,7 @@ procedure TPageInfo.SetGID(Value: TAria2GID);
 var
   i: Integer;
 begin
+  if Value = FGID then Exit;
   inherited;
   Pieces.Clear;
   for i := 0 to High(Labels) do
