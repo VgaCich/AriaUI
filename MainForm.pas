@@ -9,7 +9,7 @@ uses
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
-  TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath);
+  TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath, ftLongStatus);
   TListColumn = record
     Caption: string;
     Width: Integer;
@@ -231,6 +231,10 @@ function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType
       Result := Result + '%';
   end;
 
+const
+  StatusSeeding: array[Boolean] of string = (' [S]', '; seeding');
+  StatusVerify: array[Boolean] of string = (' [V]', '; verify pending');
+  StatusVerifying: array[Boolean] of string = (' [V: ', '; verifying [');
 begin
   case FType of
     ftNone: Result := '';
@@ -239,14 +243,14 @@ begin
                Result := List[sfBTName]
              else
                Result := Names.Values[List[sfGID]];
-    ftStatus: begin
+    ftStatus, ftLongStatus: begin
                  Result := List[sfStatus];
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-                   Result := Result + ' [S]';
+                   Result := Result + StatusSeeding[FType = ftLongStatus];
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := Result + ' [V]';
+                   Result := Result + StatusVerify[FType = ftLongStatus];
                  if List.Has[sfVerifiedLength] then
-                   Result := Result + ' [V: ' + SizeToStr(List.Int64[sfVerifiedLength]) + ']';
+                   Result := Result + StatusVerifying[FType = ftLongStatus] + SizeToStr(List.Int64[sfVerifiedLength]) + ']';
                  if List[sfErrorMessage] <> '' then
                    Result := Result + ' (' + List[sfErrorMessage] + ')';
                end;

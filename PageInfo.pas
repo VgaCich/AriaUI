@@ -64,7 +64,7 @@ const
     (Caption: 'Following: %s'; Flags: []; FType: ftString; Field: sfFollowing),
     (Caption: '%s'; Flags: []; FType: ftNone; Field: ''),
     (Caption: 'Transfer%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
-    (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftStatus; Field: ''),
+    (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftLongStatus; Field: ''),
     (Caption: 'Downloaded: %s'; Flags: []; FType: ftSize; Field: sfCompletedLength),
     (Caption: 'Uploaded: %s'; Flags: []; FType: ftSize; Field: sfUploadLength),
     (Caption: 'Ratio: %s'; Flags: []; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
