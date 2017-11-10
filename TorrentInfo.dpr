@@ -234,7 +234,7 @@ var
   Arg: string;
 
 begin
-  WriteLn('TorrentInfo 1.0');
+  WriteLn('TorrentInfo 1.0 (c)Vga, 2017');
   WriteLn;
   if ParamCount = 0 then
   begin
