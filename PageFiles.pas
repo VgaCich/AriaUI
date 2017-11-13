@@ -176,7 +176,7 @@ begin
         IDInvertSelection: ChangeSelection(csInvert);
       end;
     except
-      on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+      on E: Exception do ShowException;
     end;
 end;
 

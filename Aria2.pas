@@ -24,6 +24,8 @@ type
     FRoot: string;
     FJson: PJsonValue;
     function Find(Name: string): PJsonValue;
+    function GetNamesCount: Integer;
+    function GetName(Index: Integer): string;
     function GetLength(const Name: string): Integer;
     function GetStr(const Name: string): string;
     function GetBool(const Name: string): Boolean;
@@ -36,6 +38,8 @@ type
     property Raw: PJsonValue read FJson;
     property Index: Integer read FIndex write FIndex;
     property Root: string read FRoot write FRoot;
+    property NamesCount: Integer read GetNamesCount;
+    property Names[Index: Integer]: string read GetName;
     property Has[const Name: string]: Boolean read Exists;
     property Length[const Name: string]: Integer read GetLength;
     property Str[const Name: string]: string read GetStr; default;
@@ -770,6 +774,24 @@ begin
   Item := Find(Name);
   if Assigned(Item) and (Item.VType = jtArray) then
     Result := Item.Arr.Length;
+end;
+
+function TAria2Struct.GetName(Index: Integer): string;
+begin
+  Result := '';
+  if (Index < 0) or (Index >= NamesCount) then Exit;
+  Result := Find('').Obj.Values[Index].Name;
+end;
+
+function TAria2Struct.GetNamesCount: Integer;
+var
+  Item: PJsonValue;
+begin
+  Item := Find('');
+  if Assigned(Item) and (Item.VType = jtObject) then
+    Result := Item.Obj.Length
+  else
+    Result := 0;
 end;
 
 function TAria2Struct.GetStr(const Name: string): string;

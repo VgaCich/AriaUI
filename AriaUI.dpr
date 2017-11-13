@@ -1,7 +1,7 @@
 program AriaUI;
 
 uses
-  SysSfIni, Windows, AvL, avlOneInstance, MainForm, AddForm;
+  SysSfIni, Windows, AvL, avlOneInstance, MainForm, AddForm, ServerOptionsForm;
 
 {$R *.res}
 {$R AriaUIRes.res}
@@ -22,6 +22,7 @@ begin
   IsMultiThread := true;
   FormMain := TMainForm.Create;
   FormAdd := TAddForm.Create(FormMain);
+  FormServerOptions := TServerOptionsForm.Create(FormMain);
   FormMain.Run;
   FormMain.Free;
 end.

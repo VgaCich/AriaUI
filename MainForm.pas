@@ -4,8 +4,7 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, AddForm, Aria2, RequestTransport,
-  UpdateThread, InfoPane;
+  avlListViewEx, avlTrayIcon, avlJSON, Aria2, RequestTransport, UpdateThread, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
@@ -114,8 +113,12 @@ function First(const Pair: string): string;
 function Second(const Pair: string): string;
 function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
 procedure AddStatusKey(var Keys: TStringArray; Field: string);
+procedure ShowException;
 
 implementation
+
+uses
+  AddForm, ServerOptionsForm;
 
 type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
@@ -275,6 +278,11 @@ begin
     SetLength(Keys, Length(Keys) + 1);
     Keys[High(Keys)] := Key;
   end;
+end;
+
+procedure ShowException;
+begin
+  MessageDlg(Exception(ExceptObject).Message, 'Error', MB_ICONERROR);
 end;
 
 constructor TMainForm.Create;
@@ -468,12 +476,12 @@ begin
         IDResumeAll, IDTrayResumeAll: FAria2.UnpauseAll;
         IDPauseAll, IDTrayPauseAll: FAria2.PauseAll(GetKeyState(VK_SHIFT) < 0);
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then FAria2.PurgeDownloadResult;
-        IDServerOptions: MessageDlg(JsonToStr(FAria2.GetGlobalOptions.Raw), 'Aria2 options', MB_ICONINFORMATION);
+        IDServerOptions: FormServerOptions.Show;
         IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
         IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
       end;
     except
-      on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+      on E: Exception do ShowException;
     end;
   if Assigned(ToolBar) and (Msg.Ctl = ToolBar.Handle) then
     Perform(WM_COMMAND, Ord(TBMenuIDs[TTBButtons(Msg.ItemID)]), 0);
@@ -540,9 +548,8 @@ begin
     Res := FAria2.AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options);
     Finalize(Res);
   except
-    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+    on E: Exception do ShowException;
   end;
-
 end;
 
 procedure TMainForm.AddTorrent(Sender: TObject);
@@ -550,7 +557,7 @@ begin
   try
     FAria2.AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options);
   except
-    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+    on E: Exception do ShowException;
   end;
 end;
 
@@ -564,7 +571,7 @@ begin
   try
     FAria2.AddUri(FormAdd.URLs, FormAdd.Options);
   except
-    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+    on E: Exception do ShowException;
   end;
 end;
 
@@ -904,7 +911,7 @@ begin
       FreeAndNil(Status);
     end;
   except
-    on E: Exception do MessageDlg(E.Message, 'Error', MB_ICONERROR);
+    on E: Exception do ShowException;
   end;
 end;
 
