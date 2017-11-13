@@ -131,7 +131,7 @@ begin
   LPieces.Font.Style := LPieces.Font.Style + [fsBold];
   LPieces.Color := clSilver;
   Pieces := TPieceBar.Create(Self);
-  Pieces.SetPosition(5, 20);
+  Pieces.SetPosition(5, 25);
   SetLength(Labels, Length(InfoFields));
   for i := 0 to High(Labels) do
   begin

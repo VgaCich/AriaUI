@@ -1,5 +1,7 @@
 unit OptionsList;
 
+//TODO: Options description
+
 interface
 
 uses
@@ -70,6 +72,7 @@ var
   i, Item: Integer;
 begin
   List.Clear;
+  Value.Clear;
   for i := 0 to Options.NamesCount - 1 do
   begin
     Item := List.ItemAdd(Options.Names[i]);

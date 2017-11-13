@@ -107,6 +107,7 @@ const
   SUsername = 'Username';
   SPassword = 'Password';
   SToken = 'Token';
+  SUseSSL = 'UseSSL';
   SSplitter = 'Splitter';
 
 function First(const Pair: string): string;
@@ -829,7 +830,7 @@ begin
   ClearStatusBar;
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;
-  FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''));
+  FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''), Settings.ReadBool(Section, SUseSSL, false));
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;

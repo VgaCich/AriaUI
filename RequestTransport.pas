@@ -9,11 +9,12 @@ type
   TRequestTransport = class
   private
     FSession, FConnection: HINTERNET;
+    FRequestFlags: Cardinal;
     FRequestLock: TCriticalSection;
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Connect(const Server: string; Port: Word; const UserName, Password: string);
+    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
     procedure Disconnect;
     function SendRequest(Sender: TObject; const Request: string): string;
   end;
@@ -40,7 +41,7 @@ begin
   inherited;
 end;
 
-procedure TRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string);
+procedure TRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
 begin
   if FSession = nil then
     raise Exception.Create('WinInet not initialized');
@@ -50,6 +51,9 @@ begin
     FConnection := InternetConnect(FSession, PChar(Server), Port, PChar(UserName), PChar(Password), INTERNET_SERVICE_HTTP, INTERNET_FLAG_EXISTING_CONNECT, 0);
     if FConnection = nil then
       raise Exception.Create('Can''t connect to Aria2 server');
+    FRequestFlags := INTERNET_FLAG_KEEP_CONNECTION or INTERNET_FLAG_DONT_CACHE or INTERNET_FLAG_NO_COOKIES or INTERNET_FLAG_PRAGMA_NOCACHE or INTERNET_FLAG_RELOAD;
+    if UseSSL then
+      FRequestFlags := FRequestFlags or INTERNET_FLAG_SECURE{ or INTERNET_FLAG_IGNORE_CERT_CN_INVALID or INTERNET_FLAG_IGNORE_CERT_DATE_INVALID};
   finally
     FRequestLock.Release;
   end;
@@ -77,7 +81,7 @@ begin
     raise Exception.Create('No connection to Aria2 server');
   FRequestLock.Acquire;
   try
-    Req := HttpOpenRequest(FConnection, 'POST', '/jsonrpc', nil, nil, nil, INTERNET_FLAG_KEEP_CONNECTION or INTERNET_FLAG_DONT_CACHE or INTERNET_FLAG_NO_COOKIES or INTERNET_FLAG_PRAGMA_NOCACHE or INTERNET_FLAG_RELOAD {or INTERNET_FLAG_SECURE or INTERNET_FLAG_IGNORE_CERT_CN_INVALID or INTERNET_FLAG_IGNORE_CERT_DATE_INVALID}, 0);
+    Req := HttpOpenRequest(FConnection, 'POST', '/jsonrpc', nil, nil, nil, FRequestFlags, 0);
     if Req = nil then
       raise Exception.Create('Can''t open request');
     try
