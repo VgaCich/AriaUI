@@ -78,7 +78,12 @@ procedure TServerOptionsForm.Show;
 var
   Opts: TAria2Struct;
 begin
-  Opts := FormMain.Aria2.GetGlobalOptions;
+  try
+    Opts := FormMain.Aria2.GetGlobalOptions;
+  except
+    ShowException;
+    Exit;
+  end;
   try
     Options.SetOptions(Opts);
   finally

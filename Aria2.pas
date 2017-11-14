@@ -234,7 +234,7 @@ const
   soMaxDownloadLimit = 'max-download-limit';
   soMaxFileNotFound = 'max-file-not-found';
   soMaxMmapLimit = 'max-mmap-limit';
-  soMexResumeFailureTries = 'max-resume-failure-tries';
+  soMaxResumeFailureTries = 'max-resume-failure-tries';
   soMaxTries = 'max-tries';
   soMaxUploadLimit = 'max-upload-limit';
   soMetalinkBaseUri = 'metalink-base-uri';
@@ -265,7 +265,7 @@ const
   soSeedTime = 'seed-time';
   soSelectFile = 'select-file';
   soSplit = 'split';
-  soSshHostKeyMD = 'ssh-host-key-md';
+  soSSHHostKeyMD = 'ssh-host-key-md';
   soStreamPieceSelector = 'stream-piece-selector';
   soTimeout = 'timeout';
   soUriSelector = 'uri-selector';
@@ -285,10 +285,52 @@ const
   soSaveCookies = 'save-cookies';
   soSaveSession = 'save-session';
   soServerStatOf = 'server-stat-of';
+  //CLI-only options
+  soBTDetachSeedOnly = 'detach-seed-only';
+  soBTLoadSavedMetadata = 'bt-load-saved-metadata';
+  soBTLPDInterface = 'bt-lpd-interface';
+  soCACertificate = 'ca-certificate';
+  soCertificate = 'certificate';
+  soCheckCertificate = 'check-certificate';
+  soDHTEntryPoint = 'dht-entry-point';
+  soDHTEntryPoint6 = 'dht-entry-point6';
+  soDHTFilePath = 'dht-file-path';
+  soDHTFilePath6 = 'dht-file-path6';
+  soDHTListenAddr6 = 'dht-listen-addr6';
+  soDHTListenPort = 'dht-listen-port';
+  soDHTMessageTimeout = 'dht-message-timeout';
+  soEnableDHT = 'enable-dht';
+  soEnableDHT6 = 'enable-dht6';
+  soHelp = 'help';
+  soInputFile = 'input-file';
+  soListenPort = 'listen-port';
+  soLoadCookies = 'load-cookies';
+  soNetrcPath = 'netrc-path';
+  soPeerAgent = 'peer-agent';
+  soPeerIDPrefix = 'peer-id-prefix';
+  soPrivateKey = 'private-key';
+  soServerStatIf = 'server-stat-if';
+  soServerStatTimeout = 'server-stat-timeout';
+  soShowFiles = 'show-files';
+  soTorrentFile = 'torrent-file';
   //Options values
-  //TODO
+  svAdaptive = 'adaptive';
+  svArc4 = 'arc4';
+  svAscii = 'ascii';
+  svBinary = 'binary';
+  svDefault = 'default';
   svFalse = 'false';
+  svFeedback = 'feedback';
+  svGeom = 'geom';
+  svGet = 'get';
+  svHead = 'head';
+  svInOrder = 'inorder';
+  svMem = 'mem';
+  svPlain = 'plain';
+  svRandom = 'random';
+  svTail = 'tail';
   svTrue = 'true';
+  svTunnel = 'tunnel';
   //Error/exit codes
   aeSuccessful = 0;
   aeUnknownError = 1;
@@ -323,6 +365,178 @@ const
   aeBadJsonRequest = 30;
   aeReserved = 31;
   aeChecksumFailed = 32;
+  //Options info
+  OSep = '|';
+  ovAddr = '<addr>';
+  ovBoolean = svFalse + OSep + svTrue;
+  ovChecksum = '<type>=<digest>';
+  ovFile = '<file>';
+  ovHostPort = '<host>:<port>';
+  ovInterface = '<interface>';
+  ovIPAddress = '<ip address>';
+  ovNum = '<num>';
+  ovPath = '<path>';
+  ovPort = '<port>';
+  ovPorts = '<port>,[port],[<port>-<port>]';
+  ovProxy = '[http://][username:password@]<host>[:port]';
+  ovPasswd = '<password>';
+  ovSec = '<sec>';
+  ovSize = '<size>';
+  ovSpeed = '<speed>';
+  ovUriList = '<uri>[,uri]...';
+  ovUser = '<username>';
+  Aria2Options: array[0..148] of TAria2Option = (
+    (Key: soAllProxy; Value: ovProxy),
+    (Key: soAllProxyPasswd; Value: ovPasswd),
+    (Key: soAllProxyUser; Value: ovUser),
+    (Key: soAllowOverwrite; Value: ovBoolean),
+    (Key: soAllowPieceLengthChange; Value: ovBoolean),
+    (Key: soAlwaysResume; Value: ovBoolean),
+    (Key: soAsyncDNS; Value: ovBoolean),
+    (Key: soAutoFileRenaming; Value: ovBoolean),
+    (Key: soBTEnableHookAfterHashCheck; Value: ovBoolean),
+    (Key: soBTEnableLPD; Value: ovBoolean),
+    (Key: soBTExcludeTracker; Value: ovUriList),
+    (Key: soBTExternalIP; Value: ovIPAddress),
+    (Key: soBTForceEncryption; Value: ovBoolean),
+    (Key: soBTHashCheckSeed; Value: ovBoolean),
+    (Key: soBTMaxPeers; Value: ovNum),
+    (Key: soBTMetadataOnly; Value: ovBoolean),
+    (Key: soBTMinCryptoLevel; Value: svArc4 + OSep + svPlain),
+    (Key: soBTPrioritizePiece; Value: svHead + OSep + svTail + OSep + svHead + ',' + svTail + OSep + '[head[=<size>]],[tail[=<size>]]'),
+    (Key: soBTRemoveUnselectedFile; Value: ovBoolean),
+    (Key: soBTRequestPeerSpeedLimit; Value: ovSpeed),
+    (Key: soBTRequireCrypto; Value: ovBoolean),
+    (Key: soBTSaveMetadata; Value: ovBoolean),
+    (Key: soBTSeedUnverified; Value: ovBoolean),
+    (Key: soBTStopTimeout; Value: ovSec),
+    (Key: soBTTracker; Value: ovUriList),
+    (Key: soBTTrackerConnectTimeout; Value: ovSec),
+    (Key: soBTTrackerInterval; Value: ovSec),
+    (Key: soBTTrackerTimeout; Value: ovSec),
+    (Key: soCheckIntegrity; Value: ovBoolean),
+    (Key: soChecksum; Value: ovChecksum),
+    (Key: soConditionalGet; Value: ovBoolean),
+    (Key: soConnectTimeout; Value: ovSec),
+    (Key: soContentDispositionDefaultUTF8; Value: ovBoolean),
+    (Key: soContinue; Value: ovBoolean),
+    (Key: soDir; Value: '<dir>'),
+    (Key: soDryRun; Value: ovBoolean),
+    (Key: soEnableHttpKeepAlive; Value: ovBoolean),
+    (Key: soEnableHttpPipelining; Value: ovBoolean),
+    (Key: soEnableMmap; Value: ovBoolean),
+    (Key: soEnablePeerExchange; Value: ovBoolean),
+    (Key: soFileAllocation; Value: ''),
+    (Key: soFollowMetalink; Value: ovBoolean + OSep + svMem),
+    (Key: soFollowTorrent; Value: ovBoolean + OSep + svMem),
+    (Key: soForceSave; Value: ovBoolean),
+    (Key: soFtpPasswd; Value: ovPasswd),
+    (Key: soFtpPasv; Value: ovBoolean),
+    (Key: soFtpProxy; Value: ovProxy),
+    (Key: soFtpProxyPasswd; Value: ovPasswd),
+    (Key: soFtpProxyUser; Value: ovUser),
+    (Key: soFtpReuseConnection; Value: ovBoolean),
+    (Key: soFtpType; Value: svAscii + OSep + svBinary),
+    (Key: soFtpUser; Value: ovUser),
+    (Key: soGID; Value: ''),
+    (Key: soHashCheckOnly; Value: ovBoolean),
+    (Key: soHeader; Value: '<header>'),
+    (Key: soHttpAcceptGzip; Value: ovBoolean),
+    (Key: soHttpAuthChallenge; Value: ovBoolean),
+    (Key: soHttpNoCache; Value: ovBoolean),
+    (Key: soHttpPasswd; Value: ovPasswd),
+    (Key: soHttpProxy; Value: ovProxy),
+    (Key: soHttpProxyPasswd; Value: ovPasswd),
+    (Key: soHttpProxyUser; Value: ovUser),
+    (Key: soHttpUser; Value: ovUser),
+    (Key: soHttpsProxy; Value: ovProxy),
+    (Key: soHttpsProxyPasswd; Value: ovPasswd),
+    (Key: soHttpsProxyUser; Value: ovUser),
+    (Key: soIndexOut; Value: '<index>=<path>'),
+    (Key: soLowestSpeedLimit; Value: ovSpeed),
+    (Key: soMaxConnectionPerServer; Value: ovNum),
+    (Key: soMaxDownloadLimit; Value: ''),
+    (Key: soMaxFileNotFound; Value: ovNum),
+    (Key: soMaxMmapLimit; Value: ''),
+    (Key: soMaxResumeFailureTries; Value: ''),
+    (Key: soMaxTries; Value: ovNum),
+    (Key: soMaxUploadLimit; Value: ovSpeed),
+    (Key: soMetalinkBaseUri; Value: ''),
+    (Key: soMetalinkEnableUniqueProtocol; Value: ovBoolean),
+    (Key: soMetalinkLanguage; Value: ''),
+    (Key: soMetalinkLocation; Value: ''),
+    (Key: soMetalinkOS; Value: ''),
+    (Key: soMetalinkPreferredProtocol; Value: ''),
+    (Key: soMetalinkVersion; Value: ''),
+    (Key: soMinSplitSize; Value: ovSize),
+    (Key: soNoFileAllocationLimit; Value: ''),
+    (Key: soNoNetrc; Value: ovBoolean),
+    (Key: soNoProxy; Value: '<domains>'),
+    (Key: soOut; Value: ovFile),
+    (Key: soParameterizedUri; Value: ovBoolean),
+    (Key: soPause; Value: ovBoolean),
+    (Key: soPauseMetadata; Value: ovBoolean),
+    (Key: soPieceLength; Value: ''),
+    (Key: soProxyMethod; Value: svGet + OSep + svTunnel),
+    (Key: soRealtimeChunkChecksum; Value: ovBoolean),
+    (Key: soReferer; Value: '<referer>'),
+    (Key: soRemoteTime; Value: ovBoolean),
+    (Key: soRemoveControlFile; Value: ovBoolean),
+    (Key: soRetryWait; Value: ovSec),
+    (Key: soReuseUri; Value: ovBoolean),
+    (Key: soRPCSaveUploadMetadata; Value: ovBoolean),
+    (Key: soSeedRatio; Value: '<ratio>'),
+    (Key: soSeedTime; Value: '<min>'),
+    (Key: soSelectFile; Value: '<index>,[index],[<index>-<index>]'),
+    (Key: soSplit; Value: ovNum),
+    (Key: soSSHHostKeyMD; Value: ovChecksum),
+    (Key: soStreamPieceSelector; Value: svDefault + OSep + svGeom + OSep + svInOrder + OSep + svRandom),
+    (Key: soTimeout; Value: ovSec),
+    (Key: soUriSelector; Value: svAdaptive + OSep + svFeedback + OSep + svInOrder),
+    (Key: soUseHead; Value: ovBoolean),
+    (Key: soUserAgent; Value: '<user agent>'),
+    //Global options
+    (Key: soBTMaxOpenFiles; Value: ovNum),
+    (Key: soDownloadResult; Value: ''),
+    (Key: soKeepUnfinishedDownloadResult; Value: ovBoolean),
+    (Key: soLog; Value: '<log>'),
+    (Key: soLogLevel; Value: ''),
+    (Key: soMaxConcurrentDownloads; Value: ovNum),
+    (Key: soMaxDownloadResult; Value: ''),
+    (Key: soMaxOverallDownloadLimit; Value: ovSpeed),
+    (Key: soMaxOverallUploadLimit; Value: ovSpeed),
+    (Key: soOptimizeConcurrentDownloads; Value: ovBoolean + OSep + '<A>:<B>'),
+    (Key: soSaveCookies; Value: ovFile),
+    (Key: soSaveSession; Value: ''),
+    (Key: soServerStatOf; Value: ovFile),
+    //CLI-only options
+    (Key: soBTDetachSeedOnly; Value: ovBoolean),
+    (Key: soBTLoadSavedMetadata; Value: ovBoolean),
+    (Key: soBTLPDInterface; Value: ovInterface),
+    (Key: soCACertificate; Value: ovFile),
+    (Key: soCertificate; Value: ovFile),
+    (Key: soCheckCertificate; Value: ovBoolean),
+    (Key: soDHTEntryPoint; Value: ovHostPort),
+    (Key: soDHTEntryPoint6; Value: ovHostPort),
+    (Key: soDHTFilePath; Value: ovPath),
+    (Key: soDHTFilePath6; Value: ovPath),
+    (Key: soDHTListenAddr6; Value: ovAddr),
+    (Key: soDHTListenPort; Value: ovPorts),
+    (Key: soDHTMessageTimeout; Value: ovSec),
+    (Key: soEnableDHT; Value: ovBoolean),
+    (Key: soEnableDHT6; Value: ovBoolean),
+    (Key: soHelp; Value: '<tag>|<keyword>'),
+    (Key: soInputFile; Value: ovFile),
+    (Key: soListenPort; Value: ovPorts),
+    (Key: soLoadCookies; Value: ovFile),
+    (Key: soNetrcPath; Value: ovPath),
+    (Key: soPeerAgent; Value: '<peer agent'),
+    (Key: soPeerIDPrefix; Value: '<prefix>'),
+    (Key: soPrivateKey; Value: ovFile),
+    (Key: soServerStatIf; Value: ovFile),
+    (Key: soServerStatTimeout; Value: ovSec),
+    (Key: soShowFiles; Value: ovBoolean),
+    (Key: soTorrentFile; Value: ovFile));
 
 implementation
 

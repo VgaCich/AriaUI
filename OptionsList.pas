@@ -5,7 +5,7 @@ unit OptionsList;
 interface
 
 uses
-  Windows, Messages, CommCtrl, AvL, avlListViewEx, Aria2;
+  Windows, Messages, CommCtrl, AvL, avlUtils, avlListViewEx, Aria2;
 
 type
   TOptionStates = (osChanged, osUnknown);
@@ -19,6 +19,7 @@ type
     Value: TComboBox;
     BtnSet: TButton;
     procedure AdjustColumns;
+    function GetOptionName(Item: Integer): string;
     procedure Resize(Sender: TObject);
     procedure SetValue(Sender: TObject);
     procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
@@ -83,14 +84,26 @@ begin
 end;
 
 procedure TOptionsList.WMNotify(var Msg: TWMNotify);
+var
+  i: Integer;
+  OptInfo: string;
 begin
   inherited;
   if Assigned(List) and (PNMHdr(Msg.NMHdr).hwndFrom = List.Handle) then
     if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
       with PNMListView(Msg.NMHdr)^ do
       begin
+        OptInfo := '';
+        for i := 0 to High(Aria2Options) do
+          if Aria2Options[i].Key = GetOptionName(iItem) then
+          begin
+            OptInfo := Aria2Options[i].Value;
+            Break;
+          end;
+        Value.Clear;
+        while OptInfo <> '' do
+          Value.ItemAdd(Tok(OSep, OptInfo));
         Value.Text := List.Items[iItem, 1];
-        //TODO: Fill combobox
       end;
 end;
 
@@ -105,12 +118,17 @@ begin
       SetLength(Result, Length(Result) + 1);
       with Result[High(Result)] do
       begin
-        Key := List.Items[i, 0];
-        if (Key <> '') and (Key[1] = '*') then
-          Delete(Key, 1, 1);
+        Key := GetOptionName(i);
         Value := List.Items[i, 1];
       end;
     end;
+end;
+
+function TOptionsList.GetOptionName(Item: Integer): string;
+begin
+  Result := List.Items[Item, 0];
+  if (Result <> '') and (Result[1] = '*') then
+    Delete(Result, 1, 1);
 end;
 
 procedure TOptionsList.SetValue(Sender: TObject);
@@ -120,8 +138,7 @@ begin
   Item := List.SelectedIndex;
   if Item >= 0 then
   begin
-    if (List.Items[Item, 0] <> '') and (List.Items[Item, 0][1] <> '*') then
-      List.Items[Item, 0] := '*' + List.Items[Item, 0];
+    List.Items[Item, 0] := '*' + GetOptionName(Item);
     List.Items[Item, 1] := Value.Text;
     State[Item] := State[Item] + [osChanged];
   end;
