@@ -305,6 +305,7 @@ const
   soInputFile = 'input-file';
   soListenPort = 'listen-port';
   soLoadCookies = 'load-cookies';
+  soMetalinkFile = 'metalink-file';
   soNetrcPath = 'netrc-path';
   soPeerAgent = 'peer-agent';
   soPeerIDPrefix = 'peer-id-prefix';
@@ -321,11 +322,15 @@ const
   svDefault = 'default';
   svFalse = 'false';
   svFeedback = 'feedback';
+  svFtp = 'ftp';
   svGeom = 'geom';
   svGet = 'get';
   svHead = 'head';
+  svHttp = 'http';
+  svHttps = 'https';
   svInOrder = 'inorder';
   svMem = 'mem';
+  svNone = 'none';
   svPlain = 'plain';
   svRandom = 'random';
   svTail = 'tail';
@@ -385,7 +390,7 @@ const
   ovSpeed = '<speed>';
   ovUriList = '<uri>[,uri]...';
   ovUser = '<username>';
-  Aria2Options: array[0..148] of TAria2Option = (
+  Aria2Options: array[0..149] of TAria2Option = (
     (Key: soAllProxy; Value: ovProxy),
     (Key: soAllProxyPasswd; Value: ovPasswd),
     (Key: soAllProxyUser; Value: ovUser),
@@ -461,13 +466,13 @@ const
     (Key: soMaxResumeFailureTries; Value: ''),
     (Key: soMaxTries; Value: ovNum),
     (Key: soMaxUploadLimit; Value: ovSpeed),
-    (Key: soMetalinkBaseUri; Value: ''),
+    (Key: soMetalinkBaseUri; Value: '<uri>'),
     (Key: soMetalinkEnableUniqueProtocol; Value: ovBoolean),
-    (Key: soMetalinkLanguage; Value: ''),
-    (Key: soMetalinkLocation; Value: ''),
-    (Key: soMetalinkOS; Value: ''),
-    (Key: soMetalinkPreferredProtocol; Value: ''),
-    (Key: soMetalinkVersion; Value: ''),
+    (Key: soMetalinkLanguage; Value: '<language>'),
+    (Key: soMetalinkLocation; Value: '<location>[,location]...'),
+    (Key: soMetalinkOS; Value: '<os>'),
+    (Key: soMetalinkPreferredProtocol; Value: svFtp + OSep + svHttp + OSep + svHttps + OSep + svNone),
+    (Key: soMetalinkVersion; Value: '<version>'),
     (Key: soMinSplitSize; Value: ovSize),
     (Key: soNoFileAllocationLimit; Value: ''),
     (Key: soNoNetrc; Value: ovBoolean),
@@ -529,6 +534,7 @@ const
     (Key: soInputFile; Value: ovFile),
     (Key: soListenPort; Value: ovPorts),
     (Key: soLoadCookies; Value: ovFile),
+    (Key: soMetalinkFile; Value: ovFile),
     (Key: soNetrcPath; Value: ovPath),
     (Key: soPeerAgent; Value: '<peer agent'),
     (Key: soPeerIDPrefix; Value: '<prefix>'),

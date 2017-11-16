@@ -96,13 +96,32 @@ begin
 end;
 
 procedure TPieceBar.Paint;
+const
+  Add: array[Boolean] of Integer = (-1, 1);
 var
-  i: Integer;
+  i, Cur, Bound, Acc: Integer;
 begin
-  FBitmap.Canvas.FillRect(Rect(0, 0, FPiecesCount, 1));
-  for i := 0 to High(FPieces) do
-    if FPieces[i] then
-      FBitmap.Canvas.Pixels[i, 0] := clBlue;
+  FBitmap.Canvas.FillRect(Rect(0, 0, FBitmap.Width, 1));
+  if FBitmap.Width < Length(FPieces) then
+  begin
+    Cur := 0;
+    for i := 0 to FBitmap.Width - 1 do
+    begin
+      Bound := Min(Round(((i + 1) / FBitmap.Width) * Length(FPieces)), High(FPieces));
+      Acc := 0;
+      while Cur < Bound do
+      begin
+        Acc := Acc + Add[FPieces[i]];
+        Inc(Cur);
+      end;
+      if Acc > 0 then
+        FBitmap.Canvas.Pixels[i, 0] := clBlue;
+    end;
+  end
+  else
+    for i := 0 to High(FPieces) do
+      if FPieces[i] then
+        FBitmap.Canvas.Pixels[i, 0] := clBlue;
   FBitmap.DrawStretch(Canvas.Handle, Rect(0, 0, ClientWidth, ClientHeight));
 end;
 
@@ -112,7 +131,7 @@ begin
   begin
     FPiecesCount := Value;
     SetLength(FPieces, Value);
-    FBitmap.Width := Max(FPiecesCount, 1);
+    FBitmap.Width := Min(Max(FPiecesCount, 1), 2 * ClientWidth);
     Invalidate;
   end;
 end;
