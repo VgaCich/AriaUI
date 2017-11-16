@@ -110,8 +110,8 @@ const
   SUseSSL = 'UseSSL';
   SSplitter = 'Splitter';
 
-function First(const Pair: string): string;
-function Second(const Pair: string): string;
+function First(const Pair: string; const Sep: Char = ':'): string;
+function Second(const Pair: string; const Sep: Char = ':'): string;
 function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
 procedure AddStatusKey(var Keys: TStringArray; Field: string);
 procedure ShowException;
@@ -214,14 +214,14 @@ var
     (fVirt: FALT or FVIRTKEY; Key: Ord('X'); Cmd: Ord(IDExit)),
     (fVirt: FVIRTKEY; Key: VK_F1; Cmd: Ord(IDAbout)));
 
-function First(const Pair: string): string;
+function First(const Pair: string; const Sep: Char = ':'): string;
 begin
-  Result := Copy(Pair, 1, FirstDelimiter(':', Pair) - 1);
+  Result := Copy(Pair, 1, FirstDelimiter(Sep, Pair) - 1);
 end;
 
-function Second(const Pair: string): string;
+function Second(const Pair: string; const Sep: Char = ':'): string;
 begin
-  Result := Copy(Pair, FirstDelimiter(':', Pair) + 1, MaxInt);
+  Result := Copy(Pair, FirstDelimiter(Sep, Pair) + 1, MaxInt);
 end;
 
 function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
@@ -274,6 +274,7 @@ begin
   while Field <> '' do
   begin
     Key := Tok(':', Field);
+    Key := Tok('.', Key);
     for i := 0 to High(Keys) do
       if Keys[i] = Key then Continue;
     SetLength(Keys, Length(Keys) + 1);

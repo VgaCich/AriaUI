@@ -137,7 +137,7 @@ end;
 
 procedure TPageFiles.Refresh;
 begin
-  SetArray(FUpdateKeys, [sfDir, sfFiles]);
+  SetArray(FUpdateKeys, [sfGID, sfDir, sfFiles]);
 end;
 
 procedure TPageFiles.Resize(Sender: TObject);
@@ -222,7 +222,7 @@ var
 begin
   with UpdateThread do
   begin
-    if not Assigned(Info) or not Info.Has[sfFiles] then Exit;
+    if not Assigned(Info) or not Info.Has[sfFiles] or (Info[sfGID] <> FGID) then Exit;
     SetArray(FUpdateKeys, [sfGID]);
     FilesList.BeginUpdate;
     try

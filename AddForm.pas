@@ -49,7 +49,7 @@ begin
   OnShow := FormShow;
   LName := TLabel.Create(Self, '');
   LName.SetBounds(5, 5, ClientWidth - 10, 15);
-  LOptions := TLabel.Create(Self, 'Options (one per line, key:value):');
+  LOptions := TLabel.Create(Self, 'Options (one per line, key=value):');
   LOptions.SetBounds(5, 155, ClientWidth - 10, 15);
   FileName := TEdit.Create(Self, '');
   FileName.SetBounds(5, 25, ClientWidth - 90, 24);
@@ -125,8 +125,8 @@ begin
       SetLength(Options, Length(Options) + 1);
       with Options[High(Options)] do
       begin
-        Key := Trim(First(MOptions.LineStrings[i]));
-        Value := Trim(Second(MOptions.LineStrings[i]));
+        Key := Trim(First(MOptions.LineStrings[i], '='));
+        Value := Trim(Second(MOptions.LineStrings[i], '='));
       end;
     end;
   if Assigned(FHandler) then
