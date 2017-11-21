@@ -1,7 +1,8 @@
 program AriaUI;
 
 uses
-  SysSfIni, Windows, AvL, avlOneInstance, MainForm, AddForm, ServerOptionsForm;
+  SysSfIni, Windows, AvL, avlOneInstance, MainForm, OptionsForm, AddForm,
+  ServerOptionsForm;
 
 {$R *.res}
 {$R AriaUIRes.res}
@@ -21,6 +22,7 @@ begin
   Randomize;
   IsMultiThread := true;
   FormMain := TMainForm.Create;
+  FormOptions := TOptionsForm.Create(FormMain);
   FormAdd := TAddForm.Create(FormMain);
   FormServerOptions := TServerOptionsForm.Create(FormMain);
   FormMain.Run;

@@ -31,7 +31,7 @@ uses
 constructor TServerOptionsForm.Create(AParent: TWinControl);
 begin
   inherited Create(AParent, 'Server options');
-  BorderStyle := bsDialog;
+  BorderStyle := bsDialog; //TODO: resizing
   SetSize(400 + Width - ClientWidth, 500 + Height - ClientHeight);
   Position := poScreenCenter;
   OnKeyUp := FormKeyUp;
@@ -63,7 +63,7 @@ begin
     except
       on E: Exception do ShowException;
     end;
-  Finally
+  finally
     Finalize(Opts);
   end;
   Close;

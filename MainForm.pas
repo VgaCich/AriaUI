@@ -119,7 +119,7 @@ procedure ShowException;
 implementation
 
 uses
-  AddForm, ServerOptionsForm;
+  OptionsForm, AddForm, ServerOptionsForm;
 
 type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
@@ -464,7 +464,7 @@ begin
         IDExit, IDTrayExit: ExitProgram;
         IDAbout, IDTrayAbout: ShowAbout;
         IDTrayShow: if Visible then Hide else Show;
-        IDOptions, IDTrayOptions: ShowMessage('Under construction');
+        IDOptions, IDTrayOptions: FormOptions.Show;
         IDAddURL: FormAdd.Show('Add URL', '', false, AddURL);
         IDAddTorrent: FormAdd.Show('Add Torrent', 'Torrent files|*.torrent|All files|*.*', true, AddTorrent);
         IDAddMetalink: FormAdd.Show('Add Metalink', 'Metalink files|*.metalink;*.meta4|All files|*.*', true, AddMetalink);
@@ -849,10 +849,13 @@ end;
 
 procedure TMainForm.UpdateTransfers(List: TAria2Struct);
 var
-  i, j, Image: Integer;
+  i, j, Image, TopItem, BottomItem: Integer;
   P: PChar;
   S: string;
+  Pt: TPoint;
 begin
+  TopItem := TransfersList.Perform(LVM_GETTOPINDEX, 0, 0);
+  BottomItem := TopItem + TransfersList.Perform(LVM_GETCOUNTPERPAGE, 0, 0);
   for i := 0 to List.Length[''] - 1 do
   begin
     List.Index := i;
@@ -860,9 +863,17 @@ begin
     begin
       FTransfersUpdate.Item := TransfersList.ItemAdd('');
       GetMem(P, 32);
+      ZeroMemory(P, 32);
       TransfersList.ItemObject[FTransfersUpdate.Item] := TObject(P);
     end;
-    LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]));
+    TransfersList.Perform(LVM_GETORIGIN, 0, Integer(@Pt));
+    if GetGID(FTransfersUpdate.Item) <> List[sfGID] then
+      LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]))
+    else if (FTransfersUpdate.Item < TopItem) or (FTransfersUpdate.Item > BottomItem) then
+    begin
+      Inc(FTransfersUpdate.Item);
+      Continue;
+    end;
     for j := Low(FTransferColumns) to High(FTransferColumns) do
     begin
       S := GetFieldValue(List, FUpdateThread.Names, FTransferColumns[j].FType, FTransferColumns[j].Field);
