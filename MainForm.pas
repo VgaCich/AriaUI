@@ -34,6 +34,8 @@ type
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
     FUpdateThread: TUpdateThread;
+    FUpdateTransferKeys: Boolean;
+    FTransferKeys: TStringArray;
     FTransferColumns: TListColumns;
     FTransfersUpdate: record
       Item: Integer;
@@ -41,7 +43,7 @@ type
     end;
     procedure AddMetalink(Sender: TObject);
     procedure AddTorrent(Sender: TObject);
-    procedure AddTransfersKey(const Column: TListColumn);
+    procedure AddTransferKey(const Column: TListColumn);
     procedure AddURL(Sender: TObject);
     procedure BeginTransfersUpdate;
     function CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
@@ -64,7 +66,7 @@ type
     procedure Refresh;
     function RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure UpdateTransfers(List: TAria2Struct);
-    //procedure RepaintAll;
+    procedure RepaintAll;
     function ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ServerChange(Sender: TObject);
     procedure ShowAbout;
@@ -80,6 +82,8 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    procedure LoadSettings;
+    procedure SaveSettings;
     procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
     procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
     property Aria2: TAria2 read FAria2;
@@ -309,9 +313,9 @@ begin
   OnProcessMsg := FormProcessMsg;
   SetSize(800, 600);
   Position := poScreenCenter;
-  Settings.RestoreFormState(ClassName, Self);
   FMinHeight := 300;
   FMinWidth := 400;
+  Settings.RestoreFormState(ClassName, Self);
   FRequestTransport := TRequestTransport.Create;
   FAria2 := TAria2.Create(FRequestTransport.SendRequest);
   FUpdateThread := TUpdateThread.Create(FAria2);
@@ -364,15 +368,12 @@ begin
   TransfersList.SmallImages := FTransferIcons;
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
   TransfersList.OnDblClick := TransferDblClick;
-  SetLength(FUpdateThread.TransfersKeys, Length(BasicTransferKeys));
-  SetArray(FUpdateThread.TransfersKeys, BasicTransferKeys);
-  LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransfersKey);
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
   OnResize := FormResize;
   FormResize(Self);
-  ServerChange(ServersList);
+  LoadSettings;
   FUpdateThread.Resume;
 end;
 
@@ -464,7 +465,7 @@ begin
         IDExit, IDTrayExit: ExitProgram;
         IDAbout, IDTrayAbout: ShowAbout;
         IDTrayShow: if Visible then Hide else Show;
-        IDOptions, IDTrayOptions: FormOptions.Show;
+        IDOptions, IDTrayOptions: begin SaveSettings; FormOptions.Show; end;
         IDAddURL: FormAdd.Show('Add URL', '', false, AddURL);
         IDAddTorrent: FormAdd.Show('Add Torrent', 'Torrent files|*.torrent|All files|*.*', true, AddTorrent);
         IDAddMetalink: FormAdd.Show('Add Metalink', 'Metalink files|*.metalink;*.meta4|All files|*.*', true, AddMetalink);
@@ -529,7 +530,7 @@ begin
   end;
 end;
 
-{procedure TMainForm.RepaintAll;
+procedure TMainForm.RepaintAll;
 var
   Cur: TWinControl;
 begin
@@ -540,7 +541,7 @@ begin
     UpdateWindow(Cur.Handle);
     Cur := Cur.NextControl;
   end;
-end;}
+end;
 
 procedure TMainForm.AddMetalink(Sender: TObject);
 var
@@ -563,9 +564,9 @@ begin
   end;
 end;
 
-procedure TMainForm.AddTransfersKey(const Column: TListColumn);
+procedure TMainForm.AddTransferKey(const Column: TListColumn);
 begin
-  AddStatusKey(FUpdateThread.TransfersKeys, Column.Field);
+  AddStatusKey(FTransferKeys, Column.Field);
 end;
 
 procedure TMainForm.AddURL(Sender: TObject);
@@ -648,12 +649,8 @@ begin
   Result := not Visible;
   if Visible then
     Hide
-  else begin
-    Settings.SaveFormState(ClassName, Self);
-    Settings.WriteInteger(ClassName, SSplitter, Splitter.Top);
-    SaveListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns);
-    Info.SaveSettings;
-  end;
+  else
+    SaveSettings;
 end;
 
 procedure TMainForm.LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
@@ -741,6 +738,15 @@ begin
     Result := PChar(TransfersList.ItemObject[Index]);
 end;
 
+procedure TMainForm.LoadSettings;
+begin
+  SetArray(FTransferKeys, BasicTransferKeys);
+  LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransferKey);
+  FUpdateTransferKeys := true;
+  Info.LoadSettings;
+  ServerChange(ServersList);
+end;
+
 function TMainForm.MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
 begin
   Result := true;
@@ -819,6 +825,14 @@ begin
   Result := FAria2.Unpause(GID) = GID;
 end;
 
+procedure TMainForm.SaveSettings;
+begin
+  Settings.SaveFormState(ClassName, Self);
+  Settings.WriteInteger(ClassName, SSplitter, Splitter.Top);
+  SaveListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns);
+  Info.SaveSettings;
+end;
+
 procedure TMainForm.ServerChange(Sender: TObject);
 var
   Section: string;
@@ -845,6 +859,12 @@ begin
   FUpdateThread.StatsOnly := not Visible;
   FUpdateThread.InfoGID := Info.GID;
   FUpdateThread.InfoKeys := Info.UpdateKeys;
+  if FUpdateTransferKeys then
+  begin
+    SetArray(FUpdateThread.TransferKeys, FTransferKeys);
+    FUpdateTransferKeys := false;
+    Finalize(FTransferKeys);
+  end;
 end;
 
 procedure TMainForm.UpdateTransfers(List: TAria2Struct);

@@ -93,6 +93,7 @@ procedure TPieceBar.Clear;
 begin
   PiecesCount := 0;
   Invalidate;
+  UpdateWindow(Handle);
 end;
 
 procedure TPieceBar.Paint;
@@ -133,6 +134,7 @@ begin
     SetLength(FPieces, Value);
     FBitmap.Width := Min(Max(FPiecesCount, 1), 2 * ClientWidth);
     Invalidate;
+    UpdateWindow(Handle);
   end;
 end;
 
@@ -246,6 +248,7 @@ begin
         Bits := Bits shl 1;
       end;
       Pieces.Invalidate;
+      UpdateWindow(Pieces.Handle);
     end
     else if FBitfield <> '' then
     begin

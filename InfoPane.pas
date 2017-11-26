@@ -19,6 +19,7 @@ type
     constructor Create(Parent: TInfoPane); virtual;
     destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); virtual; abstract;
+    procedure LoadSettings; virtual;
     procedure SaveSettings; virtual;
     property Name: string read GetName;
     property GID: TAria2GID read FGID write SetGID;
@@ -33,10 +34,10 @@ type
     function GetUpdateKeys: TStringArray;
     function GetGID: TAria2GID;
     procedure SetGID(const Value: TAria2GID);
-    procedure TabChange(Sender: TObject);
     procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
   public
     constructor Create(AParent: TWinControl);
+    procedure LoadSettings;
     procedure Update(UpdateThread: TUpdateThread);
     procedure SaveSettings;
     property GID: TAria2GID read GetGID write SetGID;
@@ -90,6 +91,14 @@ begin
   Result := FCurPage.UpdateKeys;
 end;
 
+procedure TInfoPane.LoadSettings;
+var
+  Page: Integer;
+begin
+  for Page := 0 to High(Pages) do
+    Pages[Page].LoadSettings;
+end;
+
 procedure TInfoPane.Resize(Sender: TObject);
 var
   Rect: TRect;
@@ -118,17 +127,6 @@ begin
   FCurPage.GID := Value;
 end;
 
-procedure TInfoPane.TabChange(Sender: TObject);
-var
-  GID: TAria2GID;
-begin
-  GID := FCurPage.GID;
-  FCurPage.Visible := false;
-  FCurPage := Pages[Tabs.TabIndex];
-  FCurPage.GID := GID;
-  FCurPage.Visible := true;
-end;
-
 procedure TInfoPane.Update(UpdateThread: TUpdateThread);
 begin
   if Assigned(UpdateThread.Stats) and not Assigned(UpdateThread.Info) then
@@ -137,9 +135,17 @@ begin
 end;
 
 procedure TInfoPane.WMNotify(var Msg: TWMNotify);
+var
+  GID: TAria2GID;
 begin
   if Assigned(Tabs) and (Msg.NMHdr.hwndFrom = Tabs.Handle) and (Msg.NMHdr.code = TCN_SELCHANGE) then
-    TabChange(Tabs);
+  begin
+    GID := FCurPage.GID;
+    FCurPage.Visible := false;
+    FCurPage := Pages[Tabs.TabIndex];
+    FCurPage.GID := GID;
+    FCurPage.Visible := true;
+  end;
 end;
 
 { TInfoPage }
@@ -161,6 +167,11 @@ end;
 function TInfoPage.GetUpdateKeys: TStringArray;
 begin
   Result := FUpdateKeys;
+end;
+
+procedure TInfoPage.LoadSettings;
+begin
+
 end;
 
 procedure TInfoPage.SaveSettings;

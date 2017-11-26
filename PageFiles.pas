@@ -29,6 +29,7 @@ type
     constructor Create(Parent: TInfoPane); override;
     destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); override;
+    procedure LoadSettings; override;
     procedure SaveSettings; override;
   end;
 
@@ -74,7 +75,6 @@ begin
   FilesList.OptionsEx := FilesList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   FilesList.SmallImages := FFilesIcons;
   FilesList.OnDblClick := FilesDblClick;
-  (Parent.Parent as TMainForm).LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
   OnResize := Resize;
 end;
 
@@ -195,6 +195,12 @@ procedure TPageFiles.SetGID(Value: TAria2GID);
 begin
   inherited;
   Refresh;
+end;
+
+procedure TPageFiles.LoadSettings;
+begin
+  inherited;
+  (Parent.Parent as TMainForm).LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
 end;
 
 procedure TPageFiles.SaveSettings;

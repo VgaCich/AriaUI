@@ -17,7 +17,7 @@ type
     Names: TStringList;
     StatsOnly: Boolean;
     InfoGID: TAria2GID;
-    TransfersKeys, InfoKeys: TStringArray;
+    TransferKeys, InfoKeys: TStringArray;
     constructor Create(Aria2: TAria2);
     destructor Destroy; override;
     property OnBeforeUpdate: TThreadMethod read FOnBeforeUpdate write FOnBeforeUpdate;
@@ -38,7 +38,7 @@ end;
 destructor TUpdateThread.Destroy;
 begin
   FreeAndNil(Names);
-  Finalize(TransfersKeys);
+  Finalize(TransferKeys);
   inherited;
 end;
 
@@ -88,9 +88,9 @@ begin
       try
         if not StatsOnly then
         begin
-          Active := FAria2.TellActive(TransfersKeys);
-          Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], TransfersKeys);
-          Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], TransfersKeys);
+          Active := FAria2.TellActive(TransferKeys);
+          Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], TransferKeys);
+          Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], TransferKeys);
           if InfoGID <> '' then
           try
             Info := FAria2.TellStatus(InfoGID, InfoKeys);
