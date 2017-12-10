@@ -3,7 +3,7 @@ unit PageInfo;
 interface
 
 uses
-  Windows, Messages, AvL, InfoPane, Aria2, UpdateThread;
+  Windows, Messages, AvL, avlUtils, InfoPane, Aria2, UpdateThread;
 
 type
   TPieces = array of Boolean;
@@ -97,33 +97,41 @@ begin
 end;
 
 procedure TPieceBar.Paint;
-const
-  Add: array[Boolean] of Integer = (-1, 1);
 var
-  i, Cur, Bound, Acc: Integer;
+  i, Cur, Bound, Total, Num, Denom: Integer;
 begin
+  FBitmap.Canvas.Brush.Color := clWhite;
   FBitmap.Canvas.FillRect(Rect(0, 0, FBitmap.Width, 1));
+  Total := 0;
   if FBitmap.Width < Length(FPieces) then
   begin
     Cur := 0;
     for i := 0 to FBitmap.Width - 1 do
     begin
-      Bound := Min(Round(((i + 1) / FBitmap.Width) * Length(FPieces)), High(FPieces));
-      Acc := 0;
+      Bound := Min(Round(((i + 1) / FBitmap.Width) * Length(FPieces)), Length(FPieces));
+      Num := 0;
+      Denom := Max(1, Bound - Cur);
       while Cur < Bound do
       begin
-        Acc := Acc + Add[FPieces[i]];
+        if FPieces[Cur] then Inc(Num);
         Inc(Cur);
       end;
-      if Acc > 0 then
-        FBitmap.Canvas.Pixels[i, 0] := clBlue;
+      Inc(Total, Num);
+      FBitmap.Canvas.Pixels[i, 0] := LerpColor(clWhite, clBlue, Num / Denom);
     end;
   end
   else
     for i := 0 to High(FPieces) do
       if FPieces[i] then
+      begin
+        Inc(Total);
         FBitmap.Canvas.Pixels[i, 0] := clBlue;
-  FBitmap.DrawStretch(Canvas.Handle, Rect(0, 0, ClientWidth, ClientHeight));
+      end;
+  Canvas.Brush.Color := clWhite;
+  Canvas.FillRect(Rect(0, 0, ClientWidth, 5));
+  Canvas.Brush.Color := clBlue;
+  Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Length(FPieces))), 5));
+  FBitmap.DrawStretch(Canvas.Handle, Rect(0, 6, ClientWidth, ClientHeight));
 end;
 
 procedure TPieceBar.SetPiecesCount(const Value: Integer);
@@ -132,9 +140,8 @@ begin
   begin
     FPiecesCount := Value;
     SetLength(FPieces, Value);
-    FBitmap.Width := Min(Max(FPiecesCount, 1), 2 * ClientWidth);
+    FBitmap.Width := Min(Max(FPiecesCount, 1), ClientWidth);
     Invalidate;
-    UpdateWindow(Handle);
   end;
 end;
 
@@ -218,6 +225,7 @@ var
 begin
   if Value = FGID then Exit;
   inherited;
+  FBitfield := '';
   Pieces.Clear;
   for i := 0 to High(Labels) do
     Labels[i].Caption := Format(InfoFields[i].Caption, ['']);

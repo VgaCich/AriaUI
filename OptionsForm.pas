@@ -48,7 +48,7 @@ type
     procedure Load; override;
     procedure Apply; override;
   end;
-  TPageLists = class(TOptionsPage)
+  TPageInterface = class(TOptionsPage)
   protected
     function GetName: string; override;
   public
@@ -69,7 +69,7 @@ type
   TOptionsPageClass = class of TOptionsPage;
 
 var
-  OptionsPages: array[0..2] of TOptionsPageClass = (TPageGeneral, TPageServers, TPageLists);
+  OptionsPages: array[0..2] of TOptionsPageClass = (TPageGeneral, TPageServers, TPageInterface);
 
 { TOptionsForm }
 
@@ -232,26 +232,26 @@ begin
 
 end;
 
-{ TPageLists }
+{ TPageInterface }
 
-constructor TPageLists.Create(Parent: TWinControl);
+constructor TPageInterface.Create(Parent: TWinControl);
 begin
   inherited;
   Caption := Name;
 end;
 
-function TPageLists.GetName: string;
+function TPageInterface.GetName: string;
 begin
-  Result := 'Lists';
+  Result := 'Interface';
 end;
 
-procedure TPageLists.Apply;
+procedure TPageInterface.Apply;
 begin
   inherited;
 
 end;
 
-procedure TPageLists.Load;
+procedure TPageInterface.Load;
 begin
   inherited;
 

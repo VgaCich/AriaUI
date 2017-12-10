@@ -132,7 +132,7 @@ type
              IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
              IDMenuServer = 3000, IDServerOptions, IDShutdownServer, IDServerVersion,
              IDMenuHelp = 5000, IDAbout,
-             IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
+             IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTrayPurge, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
 
 const
   CRLF = #13#10;
@@ -171,11 +171,12 @@ const
   MenuHelpCapt = '&Help';
   MenuHelp: array[0..1] of PChar = ('5001',
     '&About...'#9'F1');
-  MenuTray: array[0..9] of PChar = ('10001',
+  MenuTray: array[0..10] of PChar = ('10001',
     '&Show',
     '-',
     '&Resume all',
     '&Pause all',
+    'Purge &completed',
     '-',
     '&Options...',
     '&About...',
@@ -472,13 +473,14 @@ begin
         IDResume: ProcessSelected(Ord(IDResume), ResumeTransfer, []);
         IDPause: ProcessSelected(Ord(IDPause), PauseTransfer, [], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
         IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
-        IDProperties: TransferProperties(GetGID(TransfersList.SelectedIndex), 0);//ProcessSelected(Ord(IDProperties), TransferProperties, []);
+        IDProperties: TransferProperties(GetGID(TransfersList.SelectedIndex), 0);
         IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
         IDResumeAll, IDTrayResumeAll: FAria2.UnpauseAll;
         IDPauseAll, IDTrayPauseAll: FAria2.PauseAll(GetKeyState(VK_SHIFT) < 0);
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then FAria2.PurgeDownloadResult;
+        IDTrayPurge: FAria2.PurgeDownloadResult;
         IDServerOptions: FormServerOptions.Show;
         IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
         IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
@@ -513,6 +515,7 @@ begin
   Splitter.MinPos := ToolBar.Height + 70;
   Splitter.MaxPos := StatusBar.Top - Splitter.Height;
   SplitterMove(Splitter);
+  RepaintAll;
 end;
 
 procedure TMainForm.WMSizing(var Msg: TWMMoving);

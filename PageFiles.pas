@@ -194,6 +194,7 @@ end;
 procedure TPageFiles.SetGID(Value: TAria2GID);
 begin
   inherited;
+  FilesList.Clear;
   Refresh;
 end;
 
