@@ -4,7 +4,8 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, Aria2, RequestTransport, UpdateThread, InfoPane;
+  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, Aria2, RequestTransport,
+  UpdateThread, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
@@ -29,6 +30,7 @@ type
     Info: TInfoPane;
   private
     FMinWidth, FMinHeight: Integer;
+    FEvLoadSettings, FEvSaveSettings, FEvServerChanged, FEvUpdate: Integer;
     FAccelTable: HAccel;
     FTBImages, FTransferIcons: TImageList;
     FRequestTransport: TRequestTransport;
@@ -93,6 +95,10 @@ var
   FormMain: TMainForm;
 
 const
+  EvLoadSettings = 'MainForm.LoadSettings';
+  EvSaveSettings = 'MainForm.SaveSettings';
+  EvServerChanged = 'MainForm.ServerChanged';
+  EvUpdate = 'MainForm.Update';
   BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
   AppCaption = 'Aria UI';
   AppName = 'AriaUI';
@@ -102,6 +108,7 @@ const
   STransferColumns = 'TransferListColumns';
   SCaption = 'Caption';
   SWidth = 'Width';
+  SFlags = 'Flags';
   SType = 'Type';
   SField = 'Field';
   SCount = 'Count';
@@ -308,6 +315,10 @@ begin
   inherited Create(nil, AppCaption);
   Settings := TSettings.Create(AppName); //TODO: Detect first run and run first start wizard
   Settings.Source := ssIni;
+  FEvLoadSettings := EventBus.RegisterEvent(EvLoadSettings);
+  FEvSaveSettings := EventBus.RegisterEvent(EvSaveSettings);
+  FEvServerChanged := EventBus.RegisterEvent(EvServerChanged);
+  FEvUpdate := EventBus.RegisterEvent(EvUpdate);
   OnDestroy := FormDestroy;
   OnClose := FormClose;
   OnMinimize := FormMinimize;
@@ -749,7 +760,8 @@ begin
   SetArray(FTransferKeys, BasicTransferKeys);
   LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransferKey);
   FUpdateTransferKeys := true;
-  Info.LoadSettings;
+  EventBus.SendEvent(FEvLoadSettings, Self, []);
+  RepaintAll;
   ServerChange(ServersList);
 end;
 
@@ -813,6 +825,7 @@ begin
   finally
     EndTransfersUpdate;
   end;
+  EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
 end;
 
 function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
@@ -836,7 +849,7 @@ begin
   Settings.SaveFormState(ClassName, Self);
   Settings.WriteInteger(ClassName, SSplitter, Splitter.Top);
   SaveListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns);
-  Info.SaveSettings;
+  EventBus.SendEvent(FEvSaveSettings, Self, []);
 end;
 
 procedure TMainForm.ServerChange(Sender: TObject);
@@ -852,6 +865,7 @@ begin
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;
   FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''), Settings.ReadBool(Section, SUseSSL, false));
+  EventBus.SendEvent(FEvServerChanged, Self, []);
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;

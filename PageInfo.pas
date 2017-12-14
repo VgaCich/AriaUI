@@ -3,7 +3,8 @@ unit PageInfo;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, InfoPane, Aria2, UpdateThread;
+  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, MainForm, InfoPane,
+  Aria2, UpdateThread;
 
 type
   TPieces = array of Boolean;
@@ -22,12 +23,23 @@ type
     property PiecesCount: Integer read FPiecesCount write SetPiecesCount;
     property Pieces: TPieces read FPieces;
   end;
+  TLabelFlag = (lfFullRow, lfBold, lfHighlight);
+  TLabelFlags = set of TLabelFlag;
+  TInfoField = record
+    Caption: string;
+    Flags: TLabelFlags;
+    FType: TFieldType;
+    Field: string;
+  end;
   TPageInfo = class(TInfoPage)
   private
     LPieces: TLabel;
     Pieces: TPieceBar;
     Labels: array of TLabel;
+    FColCount: Integer;
+    FInfoFields: array of TInfoField;
     FBitfield: string;
+    procedure LoadSettings(Sender: TObject; const Args: array of const);
     procedure LabelMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure Resize(Sender: TObject);
   protected
@@ -35,24 +47,18 @@ type
     procedure SetGID(Value: TAria2GID); override;
   public
     constructor Create(Parent: TInfoPane); override;
+    destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); override;
   end;
 
 implementation
 
-uses
-  MainForm;
-
-type
-  TLabelFlag = (lfFullRow, lfBold, lfHighlight);
-  TLabelFlags = set of TLabelFlag;
-  
 const
-  ColCount = 3;
+  SInfoFields = 'InfoFields';
+  SColCount = 'Columns';
   AdditionalKeys = sfNumPieces + ':' + sfBitfield;
-  //TODO: configure from settings?
-  InfoFields: array[0..18] of record Caption: string; Flags: TLabelFlags; FType: TFieldType; Field: string; end = (
-    (Caption: 'General%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
+  DefInfoFields: array[0..18] of TInfoField = (
+    (Caption: 'General'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
     (Caption: 'Name: %s'; Flags: [lfFullRow]; FType: ftName; Field: ''),
     (Caption: 'Status: %s'; Flags: [lfFullRow]; FType: ftLongStatus; Field: ''),
     (Caption: 'Save to: %s'; Flags: [lfFullRow]; FType: ftPath; Field: sfDir),
@@ -63,8 +69,8 @@ const
     (Caption: 'Pieces: %s'; Flags: []; FType: ftString; Field: sfNumPieces),
     (Caption: 'Piece size: %s'; Flags: []; FType: ftSize; Field: sfPieceLength),
     (Caption: 'Following: %s'; Flags: []; FType: ftString; Field: sfFollowing),
-    (Caption: '%s'; Flags: []; FType: ftNone; Field: ''),
-    (Caption: 'Transfer%s'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
+    (Caption: ''; Flags: []; FType: ftNone; Field: ''),
+    (Caption: 'Transfer'; Flags: [lfBold, lfFullRow, lfHighlight]; FType: ftNone; Field: ''),
     (Caption: 'Downloaded: %s'; Flags: []; FType: ftSize; Field: sfCompletedLength),
     (Caption: 'Uploaded: %s'; Flags: []; FType: ftSize; Field: sfUploadLength),
     (Caption: 'Ratio: %s'; Flags: []; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
@@ -151,8 +157,6 @@ end;
 { TPageInfo }
 
 constructor TPageInfo.Create(Parent: TInfoPane);
-var
-  i: Integer;
 begin
   inherited;
   SetArray(FUpdateKeys, BasicTransferKeys);
@@ -163,21 +167,15 @@ begin
   LPieces.Color := clSilver;
   Pieces := TPieceBar.Create(Self);
   Pieces.SetPosition(5, 25);
-  SetLength(Labels, Length(InfoFields));
-  for i := 0 to High(Labels) do
-  begin
-    Labels[i] := TLabel.Create(Self, Format(InfoFields[i].Caption, ['']));
-    if lfBold in InfoFields[i].Flags then
-      Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
-    if lfHighlight in InfoFields[i].Flags then
-      Labels[i].Color := clSilver
-    else begin
-      Labels[i].Hint := 'Right click for copy';
-      Labels[i].OnMouseUp := LabelMouseUp;
-    end;
-    AddStatusKey(FUpdateKeys, InfoFields[i].Field);
-  end;
   OnResize := Resize;
+  EventBus.AddListener(EvLoadSettings, LoadSettings);
+end;
+
+destructor TPageInfo.Destroy;
+begin
+  EventBus.RemoveListener(LoadSettings);
+  Finalize(FInfoFields);
+  inherited;
 end;
 
 function TPageInfo.GetName: string;
@@ -191,29 +189,76 @@ begin
     SetClipboardText((Sender as TWinControl).TagEx);
 end;
 
+procedure TPageInfo.LoadSettings(Sender: TObject; const Args: array of const);
+var
+  i: Integer;
+  Settings: TSettings;
+begin
+  Settings := (Sender as TMainForm).Settings; 
+  for i := 0 to High(Labels) do
+    FreeAndNil(Labels[i]);
+  Finalize(FInfoFields);
+  FColCount := Settings.ReadInteger(SInfoFields, SColCount, 3);
+  if Settings.ReadInteger(SInfoFields, SCount, 0) <> 0 then
+  begin
+    SetLength(FInfoFields, Settings.ReadInteger(SInfoFields, SCount, 0));
+    for i := 0 to High(FInfoFields) do
+      with FInfoFields[i] do
+      begin
+        Caption := Settings.ReadString(SInfoFields, SCaption + IntToStr(i), '');
+        Flags := TLabelFlags(Byte(Settings.ReadInteger(SInfoFields, SFlags + IntToStr(i), 0)));
+        FType := TFieldType(Settings.ReadInteger(SInfoFields, SType + IntToStr(i), 0));
+        Field := Settings.ReadString(SInfoFields, SField + IntToStr(i), '');
+      end;
+  end
+  else begin
+    SetLength(FInfoFields, Length(DefInfoFields));
+    for i := 0 to High(DefInfoFields) do
+      FInfoFields[i] := DefInfoFields[i];
+  end;
+  SetLength(Labels, Length(FInfoFields));
+  for i := 0 to High(Labels) do
+  begin
+    if Pos('%s', FInfoFields[i].Caption) = 0 then
+      FInfoFields[i].Caption := FInfoFields[i].Caption + '%s';
+    Labels[i] := TLabel.Create(Self, Format(FInfoFields[i].Caption, ['']));
+    if lfBold in FInfoFields[i].Flags then
+      Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
+    if lfHighlight in FInfoFields[i].Flags then
+      Labels[i].Color := clSilver
+    else begin
+      Labels[i].Hint := 'Right click for copy';
+      Labels[i].OnMouseUp := LabelMouseUp;
+    end;
+    AddStatusKey(FUpdateKeys, FInfoFields[i].Field);
+  end;
+  Resize(Self);
+end;
+
 procedure TPageInfo.Resize(Sender: TObject);
 var
   i, Row, Column: Integer;
-  Columns: array[0 .. ColCount] of Integer;
+  Columns: array of Integer;
 begin
   LPieces.SetSize(ClientWidth - 10, 15);
   Pieces.SetSize(ClientWidth - 10, 25);
-  for i := 0 to ColCount do
-    Columns[i] := 5 + Round((ClientWidth - 5) * i / ColCount);
+  SetLength(Columns, FColCount + 1);
+  for i := 0 to FColCount do
+    Columns[i] := 5 + Round((ClientWidth - 5) * i / FColCount);
   Row := Pieces.Top + Pieces.Height + 10;
   Column := 0;
   for i := 0 to High(Labels) do
   begin
-    if (Column = ColCount) or ((lfFullRow in InfoFields[i].Flags) and (Column <> 0)) then
+    if (Column = FColCount) or ((lfFullRow in FInfoFields[i].Flags) and (Column <> 0)) then
     begin
       Inc(Row, 15);
       Column := 0;
     end;
-    if lfFullRow in InfoFields[i].Flags then
+    if lfFullRow in FInfoFields[i].Flags then
     begin
       Labels[i].SetBounds(Columns[Column], Row, ClientWidth - 10, 15);
-      Column := ColCount - 1;
-      if lfHighlight in InfoFields[i].Flags then
+      Column := FColCount - 1;
+      if lfHighlight in FInfoFields[i].Flags then
         Inc(Row, 5);
     end
     else
@@ -231,13 +276,17 @@ begin
   FBitfield := '';
   Pieces.Clear;
   for i := 0 to High(Labels) do
-    Labels[i].Caption := Format(InfoFields[i].Caption, ['']);
+  begin
+    Labels[i].TagEx := '';
+    Labels[i].Caption := Format(FInfoFields[i].Caption, ['']);
+  end;
 end;
 
 procedure TPageInfo.Update(UpdateThread: TUpdateThread);
 label SkipUpdate;
 var
   i, Bits: Integer;
+  S: string;
 begin
   with UpdateThread do
   begin
@@ -268,10 +317,14 @@ begin
     end;
     SkipUpdate:
     for i := 0 to High(Labels) do
-      with InfoFields[i] do
+      with FInfoFields[i] do
       begin
-        Labels[i].TagEx := GetFieldValue(Info, Names, FType, Field);
-        Labels[i].Caption := Format(Caption, [Labels[i].TagEx]);
+        S := GetFieldValue(Info, Names, FType, Field);
+        if S <> Labels[i].TagEx then
+        begin
+          Labels[i].TagEx := S;
+          Labels[i].Caption := Format(Caption, [S]);
+        end;
       end;
   end;
 end;

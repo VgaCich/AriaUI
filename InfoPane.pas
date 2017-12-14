@@ -19,8 +19,6 @@ type
     constructor Create(Parent: TInfoPane); virtual;
     destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); virtual; abstract;
-    procedure LoadSettings; virtual;
-    procedure SaveSettings; virtual;
     property Name: string read GetName;
     property GID: TAria2GID read FGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
@@ -37,9 +35,7 @@ type
     procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
   public
     constructor Create(AParent: TWinControl);
-    procedure LoadSettings;
     procedure Update(UpdateThread: TUpdateThread);
-    procedure SaveSettings;
     property GID: TAria2GID read GetGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
   end;
@@ -47,13 +43,13 @@ type
 implementation
 
 uses
-  PageInfo, PageFiles;
+  PageInfo, PageFiles, PageSpeed;
 
 type
   TInfoPageClass = class of TInfoPage;
 
 const
-  InfoPages: array[0..1] of TInfoPageClass = (TPageInfo, TPageFiles);
+  InfoPages: array[0..2] of TInfoPageClass = (TPageInfo, TPageFiles, TPageSpeed);
 
 { TInfoPane }
 
@@ -91,14 +87,6 @@ begin
   Result := FCurPage.UpdateKeys;
 end;
 
-procedure TInfoPane.LoadSettings;
-var
-  Page: Integer;
-begin
-  for Page := 0 to High(Pages) do
-    Pages[Page].LoadSettings;
-end;
-
 procedure TInfoPane.Resize(Sender: TObject);
 var
   Rect: TRect;
@@ -112,14 +100,6 @@ begin
   Tabs.Perform(TCM_ADJUSTRECT, 0, Integer(@Rect));
   for Page := 0 to High(Pages) do
     Pages[Page].SetBounds(Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
-end;
-
-procedure TInfoPane.SaveSettings;
-var
-  i: Integer;
-begin
-  for i := 0 to High(Pages) do
-    Pages[i].SaveSettings;
 end;
 
 procedure TInfoPane.SetGID(const Value: TAria2GID);
@@ -167,16 +147,6 @@ end;
 function TInfoPage.GetUpdateKeys: TStringArray;
 begin
   Result := FUpdateKeys;
-end;
-
-procedure TInfoPage.LoadSettings;
-begin
-
-end;
-
-procedure TInfoPage.SaveSettings;
-begin
-
 end;
 
 procedure TInfoPage.SetGID(Value: TAria2GID);

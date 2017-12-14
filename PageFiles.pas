@@ -5,7 +5,8 @@ unit PageFiles;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlListViewEx, InfoPane, Aria2, UpdateThread, MainForm;
+  Windows, Messages, AvL, avlUtils, avlListViewEx, avlEventBus, MainForm,
+  InfoPane, Aria2, UpdateThread;
 
 type
   TChangeSelection = (csAdd, csRemove, csInvert);
@@ -20,6 +21,8 @@ type
     procedure Refresh;
     procedure Resize(Sender: TObject);
     procedure FilesDblClick(Sender: TObject);
+    procedure LoadSettings(Sender: TObject; const Args: array of const);
+    procedure SaveSettings(Sender: TObject; const Args: array of const);
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
     procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
   protected
@@ -29,8 +32,6 @@ type
     constructor Create(Parent: TInfoPane); override;
     destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread); override;
-    procedure LoadSettings; override;
-    procedure SaveSettings; override;
   end;
 
 const
@@ -76,10 +77,13 @@ begin
   FilesList.SmallImages := FFilesIcons;
   FilesList.OnDblClick := FilesDblClick;
   OnResize := Resize;
+  EventBus.AddListener(EvLoadSettings, LoadSettings);
+  EventBus.AddListener(EvSaveSettings, SaveSettings);
 end;
 
 destructor TPageFiles.Destroy;
 begin
+  EventBus.RemoveListeners([LoadSettings, SaveSettings]);
   Finalize(FFilesColumns);
   FFilesIcons.Handle := 0;
   FreeAndNil(FFilesIcons);
@@ -198,16 +202,14 @@ begin
   Refresh;
 end;
 
-procedure TPageFiles.LoadSettings;
+procedure TPageFiles.LoadSettings(Sender: TObject; const Args: array of const);
 begin
-  inherited;
-  (Parent.Parent as TMainForm).LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
+  (Sender as TMainForm).LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
 end;
 
-procedure TPageFiles.SaveSettings;
+procedure TPageFiles.SaveSettings(Sender: TObject; const Args: array of const);
 begin
-  inherited;
-  FormMain.SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
+  (Sender as TMainForm).SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
 end;
 
 procedure TPageFiles.Update(UpdateThread: TUpdateThread);
