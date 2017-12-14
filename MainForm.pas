@@ -56,7 +56,7 @@ type
     procedure FormDestroy(Sender: TObject);
     function FormMinimize(Sender: TObject): Boolean;
     procedure FormResize(Sender: TObject);
-    procedure TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure TrayIconMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     function QueryEndSession(var Msg: TMessages): Boolean;
     function FormProcessMsg(var Msg: TMsg): Boolean;
     function GetGID(Index: Integer): TAria2GID;
@@ -334,7 +334,7 @@ begin
   TrayIcon.ToolTip := Caption;
   TrayIcon.Icon := LoadImage(hInstance, 'MAINICON', IMAGE_ICON, 16, 16, LR_SHARED);
   TrayIcon.OnQueryEndSession := QueryEndSession;
-  TrayIcon.OnMouseUp := TrayIconMouseUp;
+  TrayIcon.OnMouseDown := TrayIconMouseDown;
   TrayIcon.Active := true;
   FAccelTable := CreateAcceleratorTable(Accels[0], Length(Accels));
   FTBImages := TImageList.Create;
@@ -395,15 +395,18 @@ begin
   inherited;
 end;
 
-procedure TMainForm.TrayIconMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TMainForm.TrayIconMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if Button=mbLeft then
     if Visible then
       Hide
     else
       Show
-  else
+  else begin
+    SetForegroundWindow(Handle);
     TrayMenu.Popup(X, Y);
+    Perform(WM_NULL, 0, 0);
+  end;
 end;
 
 function TMainForm.QueryEndSession(var Msg: TMessages): Boolean;

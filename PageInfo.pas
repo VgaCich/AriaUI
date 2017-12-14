@@ -131,6 +131,9 @@ begin
   Canvas.FillRect(Rect(0, 0, ClientWidth, 5));
   Canvas.Brush.Color := clBlue;
   Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Length(FPieces))), 5));
+  Canvas.Pen.Color := clBtnShadow;
+  Canvas.MoveTo(0, 5);
+  Canvas.LineTo(ClientWidth, 5);
   FBitmap.DrawStretch(Canvas.Handle, Rect(0, 6, ClientWidth, ClientHeight));
 end;
 
