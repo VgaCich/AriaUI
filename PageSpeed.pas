@@ -282,7 +282,10 @@ end;
 procedure TPageSpeed.UpdateGraph(Sender: TObject; const Args: array of const);
 begin
   with Args[0].VObject as TUpdateThread do
-    Graph.AddPoint([Stats.Int[sfDownloadSpeed], Stats.Int[sfUploadSpeed]]);
+    if Assigned(Stats) then
+      Graph.AddPoint([Stats.Int[sfDownloadSpeed], Stats.Int[sfUploadSpeed]])
+    else
+      Graph.AddPoint([-1, -1]);
 end;
 
 procedure TPageSpeed.Update(UpdateThread: TUpdateThread);
