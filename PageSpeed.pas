@@ -158,6 +158,10 @@ begin
       if i > 0 then
         FBitmap.Canvas.TextOut(5, Y + 2, GetLabel(Round((i / GridLines) * MaxVal)));
     end;
+    FBitmap.Canvas.Pen.Color := clBlack;
+    FBitmap.Canvas.Pen.Style := psSolid;
+    FBitmap.Canvas.MoveTo(0, FBitmap.Height - 1);
+    FBitmap.Canvas.LineTo(FBitmap.Width, FBitmap.Height - 1);
     MaxWidth := 0;
     for i := 0 to FCount - 1 do
       MaxWidth := Max(MaxWidth, FBitmap.Canvas.TextWidth(Params[i].Name));
