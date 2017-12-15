@@ -14,6 +14,7 @@ type
     FPieces: TPieces;
     FBitmap: TBitmap;
     procedure SetPiecesCount(const Value: Integer);
+    procedure Resize(Sender: TObject);
   protected
     procedure Paint; override;
   public
@@ -86,6 +87,7 @@ begin
   ExStyle := ExStyle or WS_EX_STATICEDGE;
   CanvasInit;
   FBitmap := TBitmap.CreateNew(1, 1);
+  OnResize := Resize;
 end;
 
 destructor TPieceBar.Destroy;
@@ -149,9 +151,15 @@ begin
   begin
     FPiecesCount := Value;
     SetLength(FPieces, Value);
-    FBitmap.Width := Min(Max(FPiecesCount, 1), ClientWidth);
-    Invalidate;
+    Resize(Self);
   end;
+end;
+
+procedure TPieceBar.Resize(Sender: TObject);
+begin
+  if FBitmap.Width = Min(Max(FPiecesCount, 1), ClientWidth) then Exit;
+  FBitmap.Width := Min(Max(FPiecesCount, 1), ClientWidth);
+  Invalidate;
 end;
 
 { TPageInfo }
