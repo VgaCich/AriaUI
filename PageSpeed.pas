@@ -239,8 +239,8 @@ begin
   SetArray(FUpdateKeys, [sfGID]);
   Graph := TGraph.Create(Self);
   Graph.Count := 2;
-  Graph.TimeSpan := {10 * }60 * 1000;
-  Graph.GridSpan := 60 * 100{0};
+  Graph.TimeSpan := 10 * 60 * 1000;
+  Graph.GridSpan := 60 * 1000;
   Graph.GridQuant := 1048576;
   Graph.OnGridLabel := GridLabel;
   Graph.Params[0].Name := 'DL Speed';
