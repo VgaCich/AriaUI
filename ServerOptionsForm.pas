@@ -24,7 +24,7 @@ var
 implementation
 
 uses
-  MainForm;
+  Utils, MainForm;
 
 { TServerOptionsForm }
 

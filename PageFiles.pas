@@ -39,6 +39,9 @@ const
 
 implementation
 
+uses
+  Utils;
+
 type
   TMenuID = (IDMenuFiles = 20000, IDRefresh, IDSelectAll, IDFilesSep0, IDOpen, IDOpenFolder, IDFilesSep1, IDSelect, IDDeselect, IDInvertSelection);
 

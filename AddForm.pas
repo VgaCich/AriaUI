@@ -3,7 +3,7 @@ unit AddForm;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, Aria2;
+  Windows, Messages, AvL, avlUtils, Base64, Aria2;
 
 type
   TAddForm = class(TForm)
@@ -32,9 +32,10 @@ var
 implementation
 
 uses
-  MainForm;
+  Utils, MainForm;
 
 const
+  SPersOptions = 'AddForm.Options';
   LNameCaption: array[Boolean] of string = ('Enter URLs (one per line):', 'Enter file name:');
 
 { TAddForm }
@@ -93,6 +94,7 @@ begin
     MURLs.SetFocus;
     MURLs.Perform(EM_SETSEL, 0, -1);
   end;
+  MOptions.Text := Base64Decode(FormMain.CurServerStorage.Persistent[SPersOptions]);
 end;
 
 procedure TAddForm.BrowseClick(Sender: TObject);
@@ -129,6 +131,7 @@ begin
         Value := Trim(Second(MOptions.LineStrings[i], '='));
       end;
     end;
+  FormMain.CurServerStorage.Persistent[SPersOptions] := Base64Encode(MOptions.Text);
   if Assigned(FHandler) then
     FHandler(Self);
   Close;

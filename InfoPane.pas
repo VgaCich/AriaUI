@@ -3,7 +3,7 @@ unit InfoPane;
 interface
 
 uses
-  Windows, Messages, AvL, avlEventBus, Aria2, UpdateThread;
+  Windows, Messages, AvL, avlEventBus, Utils, Aria2, UpdateThread;
 
 type
   TInfoPane = class;

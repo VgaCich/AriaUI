@@ -16,6 +16,7 @@ type
     Time: Cardinal;
     Values: array[0 .. MaxGraphs - 1] of Integer;
   end;
+  TGraphPoints = array of TGraphPoint;
   TGraphParam = record
     Name: string;
     Color: TColor;
@@ -27,13 +28,16 @@ type
   private
     FBitmap: TBitmap;
     FCount: Integer;
-    FPoints: array of TGraphPoint;
+    FPoints: TGraphPoints;
     FGridSpan, FTimeSpan: Cardinal;
     FGridQuant: Integer;
     FOnGridLabel: TOnGridLabel;
+    procedure CopyPoints(const Src: TGraphPoints; var Dst: TGraphPoints);
     function PurgeOldPoints: Cardinal;
     procedure Resize(Sender: TObject);
     procedure SetTimeSpan(const Value: Cardinal);
+    function GetBackup: TGraphPoints;
+    procedure Restore(Backup: TGraphPoints);
   protected
     procedure Paint; override;
   public
@@ -43,11 +47,18 @@ type
     procedure AddPoint(const Vals: array of Integer);
     procedure Clear;
     procedure Update;
+    property Backup: TGraphPoints read GetBackup write Restore;
     property Count: Integer read FCount write FCount;
     property TimeSpan: Cardinal read FTimeSpan write SetTimeSpan;
     property GridSpan: Cardinal read FGridSpan write FGridSpan;
     property GridQuant: Integer read FGridQuant write FGridQuant;
     property OnGridLabel: TOnGridLabel read FOnGridLabel write FOnGridLabel;
+  end;
+  TGraphData = class
+  public
+    Backup: TGraphPoints;
+    constructor Create(Data: TGraphPoints);
+    destructor Destroy; override;
   end;
   TPageSpeed = class(TInfoPage)
   private
@@ -65,6 +76,12 @@ type
   end;
 
 implementation
+
+uses
+  Utils;
+
+const
+  SGraphData = 'Speed.GraphData';
 
 { TGraph }
 
@@ -103,6 +120,21 @@ procedure TGraph.Clear;
 begin
   SetLength(FPoints, 0);
   Update;
+end;
+
+procedure TGraph.CopyPoints(const Src: TGraphPoints; var Dst: TGraphPoints);
+var
+  i: Integer;
+begin
+  SetLength(Dst, Length(Src) + 1);
+  for i := 0 to High(Src) do
+    Dst[i] := Src[i];
+  with Dst[High(Dst)] do
+  begin
+    Time := GetTickCount;
+    for i := 0 to MaxGraphs - 1 do
+      Values[i] := -1;
+  end;
 end;
 
 procedure TGraph.Paint;
@@ -181,7 +213,10 @@ begin
       FBitmap.Canvas.Pen.Style := Params[i].Style;
       FBitmap.Canvas.MoveTo(GetX(FPoints[0].Time), GetY(FPoints[0].Values[i]));
       for j := 1 to High(FPoints) do
-        FBitmap.Canvas.LineTo(GetX(FPoints[j].Time), GetY(FPoints[j].Values[i]));
+        if (FPoints[j].Values[i] = -1) or ((j > 0) and (FPoints[j - 1].Values[i] = -1)) then
+          FBitmap.Canvas.MoveTo(GetX(FPoints[j].Time), GetY(FPoints[j].Values[i]))
+        else
+          FBitmap.Canvas.LineTo(GetX(FPoints[j].Time), GetY(FPoints[j].Values[i]));
       FBitmap.Canvas.LineTo(GetX(CurTime), GetY(FPoints[High(FPoints)].Values[i]));
     end;
   finally
@@ -235,6 +270,17 @@ begin
   UpdateWindow(Handle);
 end;
 
+function TGraph.GetBackup: TGraphPoints;
+begin
+  CopyPoints(FPoints, Result);
+end;
+
+procedure TGraph.Restore(Backup: TGraphPoints);
+begin
+  CopyPoints(Backup, FPoints);
+  Update;
+end;
+
 { TPageSpeed }
 
 constructor TPageSpeed.Create(Parent: TInfoPane);
@@ -275,8 +321,16 @@ begin
 end;
 
 procedure TPageSpeed.ServerChanged(Sender: TObject; const Args: array of const);
+var
+  Data: TGraphData;
 begin
-  Graph.Clear;
+  (Args[0].VObject as TPerServerStorage)[SGraphData] := TGraphData.Create(Graph.Backup);
+  Data := (Args[1].VObject as TPerServerStorage)[SGraphData] as TGraphData;
+  if Assigned(Data) then
+    Graph.Backup := Data.Backup
+  else
+    Graph.Clear;
+  (Args[1].VObject as TPerServerStorage)[SGraphData] := nil;
 end;
 
 procedure TPageSpeed.UpdateGraph(Sender: TObject; const Args: array of const);
@@ -296,6 +350,20 @@ end;
 function TPageSpeed.GridLabel(Sender: TObject; Value: Integer): string;
 begin
   Result := SizeToStr(Value) + '/s';
+end;
+
+{ TGraphData }
+
+constructor TGraphData.Create(Data: TGraphPoints);
+begin
+  inherited Create;
+  Backup := Data;
+end;
+
+destructor TGraphData.Destroy;
+begin
+  Finalize(Backup);
+  inherited;
 end;
 
 end.

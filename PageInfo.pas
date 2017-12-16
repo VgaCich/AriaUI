@@ -3,8 +3,8 @@ unit PageInfo;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, MainForm, InfoPane,
-  Aria2, UpdateThread;
+  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, Utils, InfoPane,
+  Aria2, UpdateThread, MainForm;
 
 type
   TPieces = array of Boolean;

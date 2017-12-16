@@ -9,7 +9,6 @@ type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
   TAria2GID = string;
   TAria2GIDArray = array of TAria2GID;
-  TStringArray = array of string;
   TAria2PosOrigin = (poFromBeginning, poFromCurrent, poFromEnd);
   TAria2Status = (asActive, asWaiting, asPaused, asError, asComplete, asRemoved);
   TAria2TorrentMode = (atmSingle, atmMulti);
@@ -90,9 +89,6 @@ type
     property OnRequest: TOnRPCRequest read FOnRequest write FOnRequest;
     property RPCSecret: string read FRPCSecret write FRPCSecret;
   end;
-
-function StrToEnum(const S: string; const Values: array of string): Integer;
-procedure SetArray(var Dest: TStringArray; const Src: array of string);
 
 const
   // Status keys
@@ -546,43 +542,8 @@ const
 
 implementation
 
-function StrToEnum(const S: string; const Values: array of string): Integer;
-begin
-  for Result := Low(Values) to High(Values) do
-    if Values[Result] = S then
-      Exit;
-  Result := 0;
-end;
-
-procedure SetArray(var Dest: TStringArray; const Src: array of string);
-var
-  i: Integer;
-begin
-  SetLength(Dest, Length(Src));
-  for i := 0 to High(Src) do
-    Dest[i] := Src[i];
-end;
-
-function MakeDword(Lo, Hi: Word): Cardinal;
-begin
-  Result := (Hi shl 16) or Lo;
-end;
-
-function Select(Exp: Boolean; const STrue, SFalse: string): string;
-begin
-  if Exp then
-    Result := STrue
-  else
-    Result := SFalse;
-end;
-
-function Check(Exp: Boolean; const STrue: string): string;
-begin
-  if Exp then
-    Result := STrue
-  else
-    Result := '';
-end;
+uses
+  Utils;
 
 function Escape(C: Char): string;
 const

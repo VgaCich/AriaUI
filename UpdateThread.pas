@@ -3,7 +3,7 @@ unit UpdateThread;
 interface
 
 uses
-  Windows, AvL, Aria2;
+  Windows, AvL, Utils, Aria2;
 
 type
   TUpdateThread = class(TThread)

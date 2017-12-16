@@ -4,12 +4,11 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, Aria2, RequestTransport,
+  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, Utils, Aria2, RequestTransport,
   UpdateThread, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
-  TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath, ftLongStatus);
   TListColumn = record
     Caption: string;
     Width: Integer;
@@ -18,6 +17,20 @@ type
   end;
   TListColumns = array of TListColumn;
   TListColumnCallback = procedure(const Column: TListColumn) of object;
+  TPerServerStorage = class
+  private
+    FSection: string;
+    FTemporary: TStringList;
+    function GetPersistent(const Name: string): string;
+    function GetTemporary(const Name: string): TObject;
+    procedure PutPersistent(const Name, Value: string);
+    procedure PutTemporary(const Name: string; const Value: TObject);
+  public
+    constructor Create(ServerIndex: Integer);
+    destructor Destroy; override;
+    property Persistent[const Name: string]: string read GetPersistent write PutPersistent;
+    property Temporary[const Name: string]: TObject read GetTemporary write PutTemporary; default;
+  end;
   TMainForm = class(TForm)
     Settings: TSettings;
     MainMenu, TrayMenu, TransfersMenu: TMenu;
@@ -25,7 +38,7 @@ type
     StatusBar: TStatusBar;
     Splitter: TSplitter;
     TrayIcon: TAvLTrayIcon;
-    ServersList: TComboBox;
+    ServersList: TComboBoxEx;
     TransfersList: TListViewEx;
     Info: TInfoPane;
   private
@@ -35,6 +48,7 @@ type
     FTBImages, FTransferIcons: TImageList;
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
+    FCurServerStorage: TPerServerStorage;
     FUpdateThread: TUpdateThread;
     FUpdateTransferKeys: Boolean;
     FTransferKeys: TStringArray;
@@ -89,22 +103,23 @@ type
     procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
     procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
     property Aria2: TAria2 read FAria2;
+    property CurServerStorage: TPerServerStorage read FCurServerStorage;
   end;
 
 var
   FormMain: TMainForm;
 
 const
-  EvLoadSettings = 'MainForm.LoadSettings';
-  EvSaveSettings = 'MainForm.SaveSettings';
-  EvServerChanged = 'MainForm.ServerChanged';
-  EvUpdate = 'MainForm.Update';
-  BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
+  //Sender: MainForm
+  EvLoadSettings = 'MainForm.LoadSettings'; //No params
+  EvSaveSettings = 'MainForm.SaveSettings'; //No params
+  EvServerChanged = 'MainForm.ServerChanged'; //[PrevServerStorage, CurServerStorage]
+  EvUpdate = 'MainForm.Update'; //[UpdateThread]
   AppCaption = 'Aria UI';
   AppName = 'AriaUI';
   SServers = 'Servers';
   SServer = 'Server.';
-  SDisabledDialogs = 'DisabledDialogs';
+  SDisabledDialogs = 'DisabledDialogs'; //TODO
   STransferColumns = 'TransferListColumns';
   SCaption = 'Caption';
   SWidth = 'Width';
@@ -120,12 +135,6 @@ const
   SToken = 'Token';
   SUseSSL = 'UseSSL';
   SSplitter = 'Splitter';
-
-function First(const Pair: string; const Sep: Char = ':'): string;
-function Second(const Pair: string; const Sep: Char = ':'): string;
-function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
-procedure AddStatusKey(var Keys: TStringArray; Field: string);
-procedure ShowException;
 
 implementation
 
@@ -226,79 +235,6 @@ var
     (fVirt: FALT or FVIRTKEY; Key: Ord('X'); Cmd: Ord(IDExit)),
     (fVirt: FVIRTKEY; Key: VK_F1; Cmd: Ord(IDAbout)));
 
-function First(const Pair: string; const Sep: Char = ':'): string;
-begin
-  Result := Copy(Pair, 1, FirstDelimiter(Sep, Pair) - 1);
-end;
-
-function Second(const Pair: string; const Sep: Char = ':'): string;
-begin
-  Result := Copy(Pair, FirstDelimiter(Sep, Pair) + 1, MaxInt);
-end;
-
-function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
-
-  function GetPercent(N, Q: Int64): string;
-  begin
-    Result := FloatToStr2(100 * N / Q, 1, 2);
-    if Result = 'Nan' then
-      Result := '-'
-    else
-      Result := Result + '%';
-  end;
-
-const
-  StatusSeeding: array[Boolean] of string = (' [S]', '; seeding');
-  StatusVerify: array[Boolean] of string = (' [V]', '; verify pending');
-  StatusVerifying: array[Boolean] of string = (' [V: ', '; verifying [');
-begin
-  case FType of
-    ftNone: Result := '';
-    ftString: Result := List[Field];
-    ftName: if List.Has[sfBittorrent] and (List[sfBTName] <> '') then
-               Result := List[sfBTName]
-             else
-               Result := Names.Values[List[sfGID]];
-    ftStatus, ftLongStatus: begin
-                 Result := List[sfStatus];
-                 if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-                   Result := Result + StatusSeeding[FType = ftLongStatus];
-                 if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
-                   Result := Result + StatusVerify[FType = ftLongStatus];
-                 if List.Has[sfVerifiedLength] then
-                   Result := Result + StatusVerifying[FType = ftLongStatus] + SizeToStr(List.Int64[sfVerifiedLength]) + ']';
-                 if List[sfErrorMessage] <> '' then
-                   Result := Result + ' (' + List[sfErrorMessage] + ')';
-               end;
-    ftSize: Result := SizeToStr(List.Int64[Field]);
-    ftSpeed: Result := SizeToStr(List.Int64[Field]) + '/s';
-    ftPercent: Result := GetPercent(List.Int64[First(Field)], List.Int64[Second(Field)]);
-    ftETA: Result := EtaToStr(List.Int64[First(Second(Field))] - List.Int64[Second(Second(Field))], List.Int64[First(Field)]);
-    ftPath: Result := StringReplace(List[Field], '/', '\', [rfReplaceAll]); 
-  end;
-end;
-
-procedure AddStatusKey(var Keys: TStringArray; Field: string);
-var
-  i: Integer;
-  Key: string;
-begin
-  while Field <> '' do
-  begin
-    Key := Tok(':', Field);
-    Key := Tok('.', Key);
-    for i := 0 to High(Keys) do
-      if Keys[i] = Key then Continue;
-    SetLength(Keys, Length(Keys) + 1);
-    Keys[High(Keys)] := Key;
-  end;
-end;
-
-procedure ShowException;
-begin
-  MessageDlg(Exception(ExceptObject).Message, 'Error', MB_ICONERROR);
-end;
-
 constructor TMainForm.Create;
 
   procedure AddMenu(const Name: string; ID: Cardinal; const Template: array of PChar);
@@ -352,11 +288,8 @@ begin
   FTBImages.AddMasked(LoadImage(hInstance, 'TBMAIN', IMAGE_BITMAP, 0, 0, 0), clFuchsia);
   FTransferIcons := TImageList.Create;
   FTransferIcons.AddMasked(LoadImage(hInstance, 'TLICONS', IMAGE_BITMAP, 0, 0, 0), clFuchsia);
-  ServersList := TComboBox.Create(Self, csDropDownList);
+  ServersList := TComboBoxEx.Create(Self, csDropDownList);
   ServersList.Hint := 'Select server';
-  for i := 0 to Settings.ReadInteger(SServers, SCount, 0) - 1 do
-    ServersList.ItemAdd(Settings.ReadString(SServers, IntToStr(i), '###'));
-  ServersList.ItemIndex := Settings.ReadInteger(SServers, SCurrent, 0);
   ServersList.OnChange := ServerChange;
   ToolBar := TToolBar.Create(Self, true);
   ToolBar.Style := ToolBar.Style or TBSTYLE_TOOLTIPS or CCS_TOP;
@@ -408,7 +341,7 @@ end;
 
 procedure TMainForm.TrayIconMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if Button=mbLeft then
+  if Button = mbLeft then
     if Visible then
       Hide
     else
@@ -422,7 +355,7 @@ end;
 
 function TMainForm.QueryEndSession(var Msg: TMessages): Boolean;
 begin
-  Msg.Result:=1;
+  Msg.Result := 1;
   ExitProgram;
   Result := true;
 end;
@@ -444,7 +377,7 @@ begin
       hwndOwner := Handle;
       hInstance := SysInit.hInstance;
       lpszText  := PWideChar(WideString(AboutText));
-      lpszCaption := PWideChar(WideString(AboutCaption+Caption));
+      lpszCaption := PWideChar(WideString(AboutCaption + Caption));
       lpszIcon := AboutIcon;
       dwStyle := MB_USERICON;
     end;
@@ -458,7 +391,7 @@ begin
       hwndOwner := Handle;
       hInstance := SysInit.hInstance;
       lpszText  := PAnsiChar(AboutText);
-      lpszCaption := PAnsiChar(AboutCaption+Caption);
+      lpszCaption := PAnsiChar(AboutCaption + Caption);
       lpszIcon := AboutIcon;
       dwStyle := MB_USERICON;
     end;
@@ -670,6 +603,7 @@ begin
     SaveSettings;
 end;
 
+//TODO: Move Load/SaveListColumns to Options
 procedure TMainForm.LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
 var
   i: Integer;
@@ -756,7 +690,17 @@ begin
 end;
 
 procedure TMainForm.LoadSettings;
+var
+  i: Integer;
 begin
+  for i := 0 to ServersList.ItemCount - 1 do
+    ServersList.Objects[i].Free;
+  ServersList.Clear;
+  for i := 0 to Settings.ReadInteger(SServers, SCount, 0) - 1 do
+    ServersList.Objects[ServersList.ItemAdd(Settings.ReadString(SServers, IntToStr(i), '###'))] := TPerServerStorage.Create(i);
+  if ServersList.ItemCount = 0 then
+    ServersList.Objects[ServersList.ItemAdd('###')] := TPerServerStorage.Create(0);
+  ServersList.ItemIndex := Settings.ReadInteger(SServers, SCurrent, 0);
   SetArray(FTransferKeys, BasicTransferKeys);
   LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransferKey);
   FUpdateTransferKeys := true;
@@ -822,10 +766,10 @@ begin
       StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
     end;
     Info.Update(FUpdateThread);
+    EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
   finally
     EndTransfersUpdate;
   end;
-  EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
 end;
 
 function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
@@ -855,7 +799,10 @@ end;
 procedure TMainForm.ServerChange(Sender: TObject);
 var
   Section: string;
+  OldStorage: TPerServerStorage;
 begin
+  OldStorage := FCurServerStorage;
+  FCurServerStorage := ServersList.Objects[ServersList.ItemIndex] as TPerServerStorage;
   Section := SServer + IntToStr(ServersList.ItemIndex);
   Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
   FRequestTransport.Disconnect;
@@ -865,7 +812,7 @@ begin
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;
   FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''), Settings.ReadBool(Section, SUseSSL, false));
-  EventBus.SendEvent(FEvServerChanged, Self, []);
+  EventBus.SendEvent(FEvServerChanged, Self, [OldStorage, FCurServerStorage]);
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
@@ -966,6 +913,61 @@ begin
   except
     on E: Exception do ShowException;
   end;
+end;
+
+{ TPerServerStorage }
+
+constructor TPerServerStorage.Create(ServerIndex: Integer);
+begin
+  inherited Create;
+  FSection := SServer + IntToStr(ServerIndex);
+  FTemporary := TStringList.Create;
+end;
+
+destructor TPerServerStorage.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to FTemporary.Count - 1 do
+    FTemporary.Objects[i].Free;
+  FreeAndNil(FTemporary);
+  inherited;
+end;
+
+function TPerServerStorage.GetPersistent(const Name: string): string;
+begin
+  if Assigned(Self) then
+    Result := FormMain.Settings.ReadString(FSection, Name, '')
+  else
+    Result := '';
+end;
+
+function TPerServerStorage.GetTemporary(const Name: string): TObject;
+begin
+  if Assigned(Self) then
+    Result := FTemporary.Objects[FTemporary.IndexOf(Name)]
+  else
+    Result := nil;
+end;
+
+procedure TPerServerStorage.PutPersistent(const Name, Value: string);
+begin
+  if Assigned(Self) then
+    FormMain.Settings.WriteString(FSection, Name, Value);
+end;
+
+procedure TPerServerStorage.PutTemporary(const Name: string; const Value: TObject);
+begin
+  if not Assigned(Self) then
+  begin
+    Value.Free;
+    Exit;
+  end;
+  if FTemporary.IndexOf(Name) >= 0 then
+    FTemporary.Objects[FTemporary.IndexOf(Name)].Free
+  else
+    FTemporary.Add(Name);
+  FTemporary.Objects[FTemporary.IndexOf(Name)] := Value;
 end;
 
 end.
