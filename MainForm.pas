@@ -766,10 +766,10 @@ begin
       StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
     end;
     Info.Update(FUpdateThread);
-    EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
   finally
     EndTransfersUpdate;
   end;
+  EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
 end;
 
 function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
