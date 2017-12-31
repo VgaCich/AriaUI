@@ -37,7 +37,7 @@ type
     ToolBar: TToolBar;
     StatusBar: TStatusBar;
     Splitter: TSplitter;
-    TrayIcon: TAvLTrayIcon;
+    TrayIcon: TAvLTrayIcon; //TODO: check icon re-creation on explorer restart
     ServersList: TComboBoxEx;
     TransfersList: TListViewEx;
     Info: TInfoPane;
@@ -430,7 +430,7 @@ begin
         IDTrayPurge: FAria2.PurgeDownloadResult;
         IDServerOptions: FormServerOptions.Show;
         IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
-        IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Aria2 version', MB_ICONINFORMATION);
+        IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Server version', MB_ICONINFORMATION);
       end;
     except
       on E: Exception do ShowException;
@@ -739,35 +739,37 @@ end;
 
 procedure TMainForm.Refresh;
 begin
-  if not Assigned(FUpdateThread.Stats) then
+  if Assigned(FUpdateThread.Stats) then
+  begin
+    with FUpdateThread do
+      TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
+        [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
+    if Visible then
+    try
+      StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
+      BeginTransfersUpdate;
+      with FUpdateThread do
+      begin
+        if Assigned(Active) then
+          UpdateTransfers(Active);
+        if Assigned(Waiting) then
+          UpdateTransfers(Waiting);
+        if Assigned(Stopped) then
+          UpdateTransfers(Stopped);
+        StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
+        StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
+        StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
+      end;
+      Info.Update(FUpdateThread);
+    finally
+      EndTransfersUpdate;
+    end;
+  end
+  else
   begin
     ClearStatusBar;
     StatusBar.SetPartText(Ord(sbConnection), 0, 'No connection');
     TrayIcon.ToolTip := Caption + CRLF + 'No connection';
-    Exit;
-  end;
-  with FUpdateThread do
-    TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
-      [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
-  if Visible then
-  try
-    StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
-    BeginTransfersUpdate;
-    with FUpdateThread do
-    begin
-      if Assigned(Active) then
-        UpdateTransfers(Active);
-      if Assigned(Waiting) then
-        UpdateTransfers(Waiting);
-      if Assigned(Stopped) then
-        UpdateTransfers(Stopped);
-      StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
-      StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
-      StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
-    end;
-    Info.Update(FUpdateThread);
-  finally
-    EndTransfersUpdate;
   end;
   EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
 end;
