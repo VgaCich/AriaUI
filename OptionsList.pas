@@ -47,7 +47,7 @@ begin
   List.ColumnAdd('Option', 50);
   List.ColumnAdd('Value', 50);
   List.SetPosition(0, 0);
-  Value := TComboBox.Create(Self, csDropDown);
+  Value := TComboBox.Create(Self, csDropDown); //TODO: create combobox in list cell
   BtnSet := TButton.Create(Self, 'Set');
   BtnSet.SetSize(50, Value.Height);
   BtnSet.OnClick := SetValue;

@@ -89,7 +89,7 @@ begin
     FileName.SetFocus;
     FileName.SelectAll;
   end;
-  if MURLs.Enabled then
+  if MURLs.Enabled then //TODO: Auto-paste URLs
   begin
     MURLs.SetFocus;
     MURLs.Perform(EM_SETSEL, 0, -1);
@@ -110,7 +110,7 @@ procedure TAddForm.OKClick(Sender: TObject);
 var
   i: Integer;
 begin
-  if MURLs.Visible then
+  if MURLs.Visible then //Add URL list support
   begin
     SetLength(URLs, 0);
     for i := 0 to MURLs.LineCount - 1 do

@@ -298,10 +298,10 @@ var
 begin
   with UpdateThread do
   begin
-    if not Assigned(Info) then Exit;
+    if not Assigned(Info) or (Info[sfGID] <> FGID) then Exit;
     if Info.Has[sfNumPieces] and Info.Has[sfBitfield] then
     begin
-      if FBitfield = Info[sfBitfield] then goto SkipUpdate;
+      if SameText(FBitfield, Info[sfBitfield]) then goto SkipUpdate;
       Pieces.PiecesCount := Info.Int[sfNumPieces];
       FBitfield := LowerCase(Info[sfBitfield]);
       Bits := 0;

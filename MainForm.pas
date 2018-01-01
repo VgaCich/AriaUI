@@ -146,8 +146,8 @@ type
   TSBPart = (sbConnection, sbDownSpeed, sbUpSpeed, sbStats);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDFileSep0, IDExit,
              IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
-             IDMenuServer = 3000, IDServerOptions, IDShutdownServer, IDServerVersion,
-             IDMenuHelp = 5000, IDAbout,
+             IDMenuServer = 3000, IDServerOptions, IDServerVersion, IDSaveSession, IDShutdownServer,
+             IDMenuHelp = 5000, IDAriaWebpage, IDAriaDocs, IDHelpSep0, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTrayPurge, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
 
 const
@@ -180,12 +180,16 @@ const
     'Pause all',
     'Purge &completed');
   MenuServerCapt = '&Server';
-  MenuServer: array[0..3] of PChar = ('3001',
+  MenuServer: array[0..4] of PChar = ('3001',
     'Server &options...',
-    '&Shutdown server',
-    'Server &version...');
+    'Server &version...',
+    '&Save session',
+    'Shut&down server');
   MenuHelpCapt = '&Help';
-  MenuHelp: array[0..1] of PChar = ('5001',
+  MenuHelp: array[0..4] of PChar = ('5001',
+    'Aria2 &web page...',
+    'Aria2 &documentation...',
+    '-',
     '&About...'#9'F1');
   MenuTray: array[0..10] of PChar = ('10001',
     '&Show',
@@ -411,7 +415,6 @@ begin
     try
       case TMenuID(Msg.ItemID) of
         IDExit, IDTrayExit: ExitProgram;
-        IDAbout, IDTrayAbout: ShowAbout;
         IDTrayShow: if Visible then Hide else Show;
         IDOptions, IDTrayOptions: begin SaveSettings; FormOptions.Show; end;
         IDAddURL: FormAdd.Show('Add URL', '', false, AddURL);
@@ -429,8 +432,12 @@ begin
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then FAria2.PurgeDownloadResult;
         IDTrayPurge: FAria2.PurgeDownloadResult;
         IDServerOptions: FormServerOptions.Show;
-        IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
         IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Server version', MB_ICONINFORMATION);
+        IDSaveSession: if FAria2.SaveSession then ShowMessage('Session saved');
+        IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
+        IDAriaWebpage: Execute('http://aria2.github.io');
+        IDAriaDocs: Execute('http://aria2.github.io/manual/en/html/index.html');
+        IDAbout, IDTrayAbout: ShowAbout;
       end;
     except
       on E: Exception do ShowException;
@@ -537,9 +544,9 @@ end;
 
 function TMainForm.CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
 const
-  Option: TAria2Option = (Key: soCheckIntegrity; Value: svTrue);
+  Options: array[0..1] of TAria2Option = ((Key: soBTSeedUnverified; Value: svFalse), (Key: soCheckIntegrity; Value: svTrue));
 begin
-  Result := FAria2.ChangeOptions(GID, [Option]);
+  Result := FAria2.ChangeOptions(GID, Options);
 end;
 
 procedure TMainForm.ClearStatusBar;
