@@ -100,7 +100,8 @@ var
   Files: TAria2Struct;
   Option: TAria2Option;
 begin
-  Files := (FParent.Parent as TMainForm).Aria2.GetFiles(FGID);
+  with (FParent.Parent as TMainForm).Aria2 do
+    Files := GetStruct(GetFiles(FGID));
   try
     SetLength(Selection, Files.Length['']);
     try
@@ -132,7 +133,8 @@ begin
         Option.Value := Option.Value + IntToStr(Start + 1) + '-' + IntToStr(Length(Selection)) + ',';
       if Option.Value <> '' then
         Delete(Option.Value, Length(Option.Value), 1);
-      (FParent.Parent as TMainForm).Aria2.ChangeOptions(FGID, [Option]);
+      with (FParent.Parent as TMainForm).Aria2 do
+        CheckResult(ChangeOptions(FGID, [Option]));
       Refresh;
     finally
       Finalize(Selection);

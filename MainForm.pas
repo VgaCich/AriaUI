@@ -86,6 +86,7 @@ type
     function ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ServerChange(Sender: TObject);
     procedure ShowAbout;
+    procedure ShowServerVersion;
     procedure SplitterMove(Sender: TObject);
     procedure TransferDblClick(Sender: TObject);
     function TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
@@ -121,11 +122,11 @@ const
   SServer = 'Server.';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
   STransferColumns = 'TransferListColumns';
-  SCaption = 'Caption';
-  SWidth = 'Width';
-  SFlags = 'Flags';
-  SType = 'Type';
-  SField = 'Field';
+  SCaption = 'Caption.';
+  SWidth = 'Width.';
+  SFlags = 'Flags.';
+  SType = 'Type.';
+  SField = 'Field.';
   SCount = 'Count';
   SCurrent = 'Current';
   SHost = 'Host';
@@ -403,6 +404,27 @@ begin
   end;
 end;
 
+procedure TMainForm.ShowServerVersion;
+const
+  Term: array[Boolean] of string = (', ', ')');
+var
+  i: Integer;
+  Ver: TAria2Struct;
+  S: string;
+begin
+  with FAria2 do
+    Ver := GetStruct(GetVersion);
+  try
+    S := 'Aria2 ' + Ver[sfVersion] + ' (features: ';
+    Ver.Root := sfEnabledFeatures;
+    for i := 0 to Ver.Length[''] - 1 do
+      S := S + Ver[IntToStr(i)] + Term[i = Ver.Length[''] - 1];
+    MessageDlg(S, 'Server version', MB_ICONINFORMATION);
+  finally
+    Ver.Free;
+  end;
+end;
+
 procedure TMainForm.SplitterMove(Sender: TObject);
 begin
   TransfersList.SetBounds(Splitter.Left, ToolBar.Height, Splitter.Width, Splitter.Top - ToolBar.Height);
@@ -427,14 +449,14 @@ begin
         IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
-        IDResumeAll, IDTrayResumeAll: FAria2.UnpauseAll;
-        IDPauseAll, IDTrayPauseAll: FAria2.PauseAll(GetKeyState(VK_SHIFT) < 0);
-        IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then FAria2.PurgeDownloadResult;
-        IDTrayPurge: FAria2.PurgeDownloadResult;
+        IDResumeAll, IDTrayResumeAll: with FAria2 do CheckResult(UnpauseAll);
+        IDPauseAll, IDTrayPauseAll: with FAria2 do CheckResult(PauseAll(GetKeyState(VK_SHIFT) < 0));
+        IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then with FAria2 do CheckResult(PurgeDownloadResult);
+        IDTrayPurge: with FAria2 do CheckResult(PurgeDownloadResult);
         IDServerOptions: FormServerOptions.Show;
-        IDServerVersion: MessageDlg('Aria2 ' + FAria2.GetVersion(true), 'Server version', MB_ICONINFORMATION);
-        IDSaveSession: if FAria2.SaveSession then ShowMessage('Session saved');
-        IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then FAria2.Shutdown(GetKeyState(VK_SHIFT) < 0);
+        IDServerVersion: ShowServerVersion;
+        IDSaveSession: with FAria2 do if GetBool(SaveSession) then ShowMessage('Session saved');
+        IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then with FAria2 do CheckResult(Shutdown(GetKeyState(VK_SHIFT) < 0));
         IDAriaWebpage: Execute('http://aria2.github.io');
         IDAriaDocs: Execute('http://aria2.github.io/manual/en/html/index.html');
         IDAbout, IDTrayAbout: ShowAbout;
@@ -501,12 +523,10 @@ begin
 end;
 
 procedure TMainForm.AddMetalink(Sender: TObject);
-var
-  Res: TAria2GIDArray;
 begin
   try
-    Res := FAria2.AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options);
-    Finalize(Res);
+    with FAria2 do
+      CheckResult(AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options));
   except
     on E: Exception do ShowException;
   end;
@@ -515,7 +535,8 @@ end;
 procedure TMainForm.AddTorrent(Sender: TObject);
 begin
   try
-    FAria2.AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options);
+    with FAria2 do
+      CheckResult(AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options));
   except
     on E: Exception do ShowException;
   end;
@@ -529,7 +550,8 @@ end;
 procedure TMainForm.AddURL(Sender: TObject);
 begin
   try
-    FAria2.AddUri(FormAdd.URLs, FormAdd.Options);
+    with FAria2 do
+      CheckResult(AddUri(FormAdd.URLs, FormAdd.Options));
   except
     on E: Exception do ShowException;
   end;
@@ -546,7 +568,8 @@ function TMainForm.CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
 const
   Options: array[0..1] of TAria2Option = ((Key: soBTSeedUnverified; Value: svFalse), (Key: soCheckIntegrity; Value: svTrue));
 begin
-  Result := FAria2.ChangeOptions(GID, Options);
+  with FAria2 do
+    Result := GetBool(ChangeOptions(GID, Options));
 end;
 
 procedure TMainForm.ClearStatusBar;
@@ -719,12 +742,14 @@ end;
 function TMainForm.MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
 begin
   Result := true;
-  FAria2.ChangePosition(GID, Param, poFromCurrent);
+  with FAria2 do
+    CheckResult(ChangePosition(GID, Param, poFromCurrent));
 end;
 
 function TMainForm.PauseTransfer(GID: TAria2GID; Param: Integer): Boolean;
 begin
-  Result := FAria2.Pause(GID, LongBool(Param)) = GID;
+  with FAria2 do
+    Result := GetGID(Pause(GID, LongBool(Param))) = GID;
 end;
 
 procedure TMainForm.ProcessSelected(ID: Integer; Handler: TTransferHandler; const Messages: array of string; Param: Integer = 0);
@@ -752,7 +777,7 @@ begin
       TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
         [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
     if Visible then
-    try
+    try //TODO: Request details only for visible items
       StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
       BeginTransfersUpdate;
       with FUpdateThread do
@@ -785,16 +810,20 @@ function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
 var
   Status: TAria2Struct;
 begin
-  Status := FAria2.TellStatus(GID, [sfStatus]);
-  if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
-    Result := FAria2.Remove(GID, LongBool(Param)) = GID
-  else
-    Result := FAria2.RemoveDownloadResult(GID);
+  with FAria2 do
+  begin
+    Status := GetStruct(TellStatus(GID, [sfStatus]));
+    if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
+      Result := GetGID(Remove(GID, LongBool(Param))) = GID
+    else
+      Result := GetBool(RemoveDownloadResult(GID));
+  end;
 end;
 
 function TMainForm.ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
 begin
-  Result := FAria2.Unpause(GID) = GID;
+  with FAria2 do
+    Result := GetGID(Unpause(GID)) = GID;
 end;
 
 procedure TMainForm.SaveSettings;
@@ -815,6 +844,7 @@ begin
   Section := SServer + IntToStr(ServersList.ItemIndex);
   Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
   FRequestTransport.Disconnect;
+  FAria2.FreeResults;
   FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
   ClearTransfersList;
   ClearStatusBar;
@@ -825,9 +855,14 @@ begin
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
+var
+  Status: TAria2Struct;
 begin
   Result := true;
-  ShowMessage(JsonToStr(FAria2.TellStatus(GID, []).Raw));
+  with FAria2 do
+    Status := GetStruct(TellStatus(GID, []));
+  ShowMessage(JsonToStr(Status.Raw));
+  Status.Free;
 end;
 
 procedure TMainForm.UpdateKeys;
@@ -867,7 +902,7 @@ begin
       LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]))
     else if (FTransfersUpdate.Item < TopItem) or (FTransfersUpdate.Item > BottomItem) then
     begin
-      Inc(FTransfersUpdate.Item);
+      Inc(FTransfersUpdate.Item); //TODO: refresh items on scrolling
       Continue;
     end;
     for j := Low(FTransferColumns) to High(FTransferColumns) do
@@ -909,7 +944,8 @@ begin
   //TODO: setting "transfer dblclick action"
   if TransfersList.SelectedIndex < 0 then Exit;
   try
-    Status := FAria2.TellStatus(GetGID(TransfersList.SelectedIndex), [sfDir]);
+    with FAria2 do
+      Status := GetStruct(TellStatus(GetGID(TransfersList.SelectedIndex), [sfDir]));
     try
       Dir := StringReplace(Status[sfDir], '/', '\', [rfReplaceAll]);
       if DirectoryExists(Dir) then

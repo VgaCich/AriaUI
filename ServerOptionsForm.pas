@@ -59,7 +59,8 @@ begin
   try
     if Length(Opts) > 0 then
     try
-      FormMain.Aria2.ChangeGlobalOptions(Opts);
+      with FormMain.Aria2 do
+        CheckResult(ChangeGlobalOptions(Opts));
     except
       on E: Exception do ShowException;
     end;
@@ -79,7 +80,8 @@ var
   Opts: TAria2Struct;
 begin
   try
-    Opts := FormMain.Aria2.GetGlobalOptions;
+    with FormMain.Aria2 do
+      Opts := GetStruct(GetGlobalOptions);
   except
     ShowException;
     Exit;

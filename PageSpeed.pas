@@ -63,10 +63,12 @@ type
   TPageSpeed = class(TInfoPage)
   private
     Graph: TGraph;
+    FTimer: TTimer;
     procedure ServerChanged(Sender: TObject; const Args: array of const);
     procedure UpdateGraph(Sender: TObject; const Args: array of const);
     function GridLabel(Sender: TObject; Value: Integer): string;
     procedure Resize(Sender: TObject);
+    procedure TimerTick(Sender: TObject);
   protected
     function GetName: string; override;
   public
@@ -217,6 +219,7 @@ begin
           FBitmap.Canvas.MoveTo(GetX(FPoints[j].Time), GetY(FPoints[j].Values[i]))
         else
           FBitmap.Canvas.LineTo(GetX(FPoints[j].Time), GetY(FPoints[j].Values[i]));
+      FBitmap.Canvas.Pen.Color := clGray;
       FBitmap.Canvas.LineTo(GetX(CurTime), GetY(FPoints[High(FPoints)].Values[i]));
     end;
   finally
@@ -299,6 +302,8 @@ begin
   Graph.Params[1].Name := 'UL Speed';
   Graph.Params[1].Color := clGreen;
   Graph.Params[1].Style := psSolid;
+  FTimer := TTimer.CreateEx(1000, true);
+  FTimer.OnTimer := TimerTick;
   OnResize := Resize;
   EventBus.AddListener(EvServerChanged, ServerChanged);
   EventBus.AddListener(EvUpdate, UpdateGraph);
@@ -306,6 +311,7 @@ end;
 
 destructor TPageSpeed.Destroy;
 begin
+  FreeAndNil(FTimer);
   EventBus.RemoveListener(UpdateGraph);
   inherited;
 end;
@@ -350,6 +356,12 @@ end;
 function TPageSpeed.GridLabel(Sender: TObject; Value: Integer): string;
 begin
   Result := SizeToStr(Value) + '/s';
+end;
+
+procedure TPageSpeed.TimerTick(Sender: TObject);
+begin
+  if Visible then
+    Graph.Update;
 end;
 
 { TGraphData }

@@ -3,10 +3,11 @@ unit Aria2;
 interface
 
 uses
-  AvL, avlUtils, avlJSON, Base64;
+  AvL, avlSyncObjs, avlUtils, avlJSON, Base64;
 
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
+  TRequestID = Cardinal;
   TAria2GID = string;
   TAria2GIDArray = array of TAria2GID;
   TAria2PosOrigin = (poFromBeginning, poFromCurrent, poFromEnd);
@@ -50,42 +51,56 @@ type
   private
     FOnRequest: TOnRPCRequest;
     FRPCSecret: string;
+    FCurID: TRequestID;
+    FBatchRequest: string;
+    FResults: array of PJsonValue;
+    FBatchLock, FRequestLock: TCriticalSection;
     function AddToken(const Params: string): string;
-    function NewId: string;
+    procedure AddResult(Reply: PJsonValue);
+    function GetResult(RequestID: TRequestID): PJsonValue;
   protected
-    function SendRequest(const Method, Params: string): PJsonValue;
-    function SendRequestStr(const Method, Params: string): string;
+    function SendRequest(const Method, Params: string): TRequestID;
   public
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');
-    function AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
-    function AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
-    function AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GIDArray;
-    function Remove(GID: TAria2GID; Force: Boolean = false): TAria2GID;
-    function Pause(GID: TAria2GID; Force: Boolean = false): TAria2GID;
-    function PauseAll(Force: Boolean = false): Boolean;
-    function Unpause(GID: TAria2GID): TAria2GID;
-    function UnpauseAll: Boolean;
-    function TellStatus(GID: TAria2GID; const Keys: array of string): TAria2Struct;
-    function GetUris(GID: TAria2GID): TAria2Struct;
-    function GetFiles(GID: TAria2GID): TAria2Struct;
-    function GetPeers(GID: TAria2GID): TAria2Struct;
-    function GetServers(GID: TAria2GID): TAria2Struct;
-    function TellActive(const Keys: array of string): TAria2Struct;
-    function TellWaiting(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
-    function TellStopped(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
-    function ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): Integer;
-    function ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer = -1): Cardinal;
-    function GetOptions(GID: TAria2GID): TAria2Struct;
-    function ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): Boolean;
-    function GetGlobalOptions: TAria2Struct;
-    function ChangeGlobalOptions(const Options: array of TAria2Option): Boolean;
-    function GetGlobalStats: TAria2Struct;
-    function PurgeDownloadResult: Boolean;
-    function RemoveDownloadResult(GID: TAria2GID): Boolean;
-    function GetVersion(Features: Boolean = false): string;
-    function GetSessionInfo: TAria2Struct;
-    function Shutdown(Force: Boolean = false): Boolean;
-    function SaveSession: Boolean;
+    destructor Destroy; override;
+    function AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID; //GID
+    function AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID; //GID
+    function AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID; //Struct
+    function Remove(GID: TAria2GID; Force: Boolean = false): TRequestID; //GID
+    function Pause(GID: TAria2GID; Force: Boolean = false): TRequestID; //GID
+    function PauseAll(Force: Boolean = false): TRequestID; //Bool
+    function Unpause(GID: TAria2GID): TRequestID; //GID
+    function UnpauseAll: TRequestID; //Bool
+    function TellStatus(GID: TAria2GID; const Keys: array of string): TRequestID; //Struct
+    function GetUris(GID: TAria2GID): TRequestID; //Struct
+    function GetFiles(GID: TAria2GID): TRequestID; //Struct
+    function GetPeers(GID: TAria2GID): TRequestID; //Struct
+    function GetServers(GID: TAria2GID): TRequestID; //Struct
+    function TellActive(const Keys: array of string): TRequestID; //Struct
+    function TellWaiting(Offset, Num: Integer; const Keys: array of string): TRequestID; //Struct
+    function TellStopped(Offset, Num: Integer; const Keys: array of string): TRequestID; //Struct
+    function ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): TRequestID; //Int
+    function ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer = -1): TRequestID; //Struct
+    function GetOptions(GID: TAria2GID): TRequestID; //Struct
+    function ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): TRequestID; //Bool
+    function GetGlobalOptions: TRequestID; //Struct
+    function ChangeGlobalOptions(const Options: array of TAria2Option): TRequestID; //Bool
+    function GetGlobalStats: TRequestID; //Struct
+    function PurgeDownloadResult: TRequestID; //Bool
+    function RemoveDownloadResult(GID: TAria2GID): TRequestID; //Bool
+    function GetVersion: TRequestID;
+    function GetSessionInfo: TRequestID; //Struct
+    function Shutdown(Force: Boolean = false): TRequestID; //Bool
+    function SaveSession: TRequestID; //Bool
+    procedure CheckResult(RequestID: TRequestID);
+    function GetBool(RequestID: TRequestID): Boolean;
+    function GetInt(RequestID: TRequestID): Integer;
+    function GetString(RequestID: TRequestID): string;
+    function GetGID(RequestID: TRequestID): TAria2GID;
+    function GetStruct(RequestID: TRequestID): TAria2Struct;
+    procedure BeginBatch;
+    procedure EndBatch;
+    procedure FreeResults;
     property OnRequest: TOnRPCRequest read FOnRequest write FOnRequest;
     property RPCSecret: string read FRPCSecret write FRPCSecret;
   end;
@@ -152,6 +167,9 @@ const
   sfNumStoppedTotal = 'numStoppedTotal';
   //SessionInfo keys
   sfSessionId = 'sessionId';
+  //Version keys
+  sfVersion = 'version';
+  sfEnabledFeatures = 'enabledFeatures';
   //Enums
   sfBoolValues: array[Boolean] of string = ('false', 'true');
   sfStatusValues: array[TAria2Status] of string = ('active', 'waiting', 'paused', 'error', 'complete', 'removed');
@@ -626,116 +644,202 @@ begin
   inherited Create;
   FOnRequest := OnRequest;
   FRPCSecret := RPCSecret;
+  FBatchLock := TCriticalSection.Create;
+  FRequestLock := TCriticalSection.Create;
 end;
 
-function TAria2.AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
+destructor TAria2.Destroy;
 begin
-  Result := SendRequestStr('aria2.addUri', MakeParams(['', '{}', ''],
+  FreeResults;
+  FreeAndNil(FRequestLock);
+  FreeAndNil(FBatchLock);
+  inherited;
+end;
+
+function TAria2.AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
+begin
+  Result := SendRequest('aria2.addUri', MakeParams(['', '{}', ''],
     [ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
 end;
 
-function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GID;
+function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
-  Result := SendRequestStr('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
+  Result := SendRequest('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
     ['"' + Base64Encode(Torrent) + '"', ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
 end;
 
-function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TAria2GIDArray;
-var
-  i: Integer;
-  Res: PJsonValue;
+function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
-  Result := nil;
-  Res := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
+  Result := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
     ['"' + Base64Encode(Metalink) + '"', OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
-  try
-    if Res.VType <> jtArray then Exit;
-    SetLength(Result, Res.Arr.Length);
-    for i := 0 to Res.Arr.Length - 1 do
-      Result[i] := JsonStr(JsonItem(Res, i));
-  finally
-    JsonFree(Res);
-  end;
 end;
 
-function TAria2.Remove(GID: TAria2GID; Force: Boolean): TAria2GID;
+function TAria2.Remove(GID: TAria2GID; Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.remove', 'aria2.forceRemove');
 begin
-  Result := SendRequestStr(Method[Force], MakeStr(GID));
+  Result := SendRequest(Method[Force], MakeStr(GID));
 end;
 
-function TAria2.Pause(GID: TAria2GID; Force: Boolean): TAria2GID;
+function TAria2.Pause(GID: TAria2GID; Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.pause', 'aria2.forcePause');
 begin
-  Result := SendRequestStr(Method[Force], MakeStr(GID));
+  Result := SendRequest(Method[Force], MakeStr(GID));
 end;
 
-function TAria2.PauseAll(Force: Boolean): Boolean;
+function TAria2.PauseAll(Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.pauseAll', 'aria2.forcePauseAll');
 begin
-  Result := SendRequestStr(Method[Force], '') = 'OK';
+  Result := SendRequest(Method[Force], '');
 end;
 
-function TAria2.Unpause(GID: TAria2GID): TAria2GID;
+function TAria2.Unpause(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequestStr('aria2.unpause', MakeStr(GID));
+  Result := SendRequest('aria2.unpause', MakeStr(GID));
 end;
 
-function TAria2.UnpauseAll: Boolean;
+function TAria2.UnpauseAll: TRequestID;
 begin
-  Result := SendRequestStr('aria2.unpauseAll', '') = 'OK';
+  Result := SendRequest('aria2.unpauseAll', '');
 end;
 
-function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): TAria2Struct;
+function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.tellStatus', MakeParams(['""', ''], [MakeStr(GID), ArrayToJson(Keys)])));
+  Result := SendRequest('aria2.tellStatus', MakeParams(['""', ''],
+    [MakeStr(GID), ArrayToJson(Keys)]));
 end;
 
-function TAria2.GetUris(GID: TAria2GID): TAria2Struct;
+function TAria2.GetUris(GID: TAria2GID): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getUris', MakeStr(GID)));
+  Result := SendRequest('aria2.getUris', MakeStr(GID));
 end;
 
-function TAria2.GetFiles(GID: TAria2GID): TAria2Struct;
+function TAria2.GetFiles(GID: TAria2GID): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getFiles', MakeStr(GID)));
+  Result := SendRequest('aria2.getFiles', MakeStr(GID));
 end;
 
-function TAria2.GetPeers(GID: TAria2GID): TAria2Struct;
+function TAria2.GetPeers(GID: TAria2GID): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getPeers', MakeStr(GID)));
+  Result := SendRequest('aria2.getPeers', MakeStr(GID));
 end;
 
-function TAria2.GetServers(GID: TAria2GID): TAria2Struct;
+function TAria2.GetServers(GID: TAria2GID): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getServers', MakeStr(GID)));
+  Result := SendRequest('aria2.getServers', MakeStr(GID));
 end;
 
-function TAria2.TellActive(const Keys: array of string): TAria2Struct;
+function TAria2.TellActive(const Keys: array of string): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.tellActive', ArrayToJson(Keys)));
+  Result := SendRequest('aria2.tellActive', ArrayToJson(Keys));
 end;
 
-function TAria2.TellWaiting(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
+function TAria2.TellWaiting(Offset, Num: Integer; const Keys: array of string): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.tellWaiting', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)])));
+  Result := SendRequest('aria2.tellWaiting', MakeParams(['', '', ''],
+    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
 end;
 
-function TAria2.TellStopped(Offset, Num: Integer; const Keys: array of string): TAria2Struct;
+function TAria2.TellStopped(Offset, Num: Integer; const Keys: array of string): TRequestID;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.tellStopped', MakeParams(['', '', ''], [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)])));
+  Result := SendRequest('aria2.tellStopped', MakeParams(['', '', ''],
+    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
 end;
 
-function TAria2.ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): Integer;
+function TAria2.ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): TRequestID;
 const
   OriginValues: array[TAria2PosOrigin] of string = ('"POS_SET"', '"POS_CUR"', '"POS_END"');
+begin
+  Result := SendRequest('aria2.changePosition', MakeParams(['""', '', ''],
+    [MakeStr(GID), IntToStr(Pos), OriginValues[Origin]]));
+end;
+
+function TAria2.ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer): TRequestID;
+begin
+  Result := SendRequest('aria2.changeUri', MakeParams(['""', '', '[]', '[]', ''],
+    [MakeStr(GID), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]));
+end;
+
+function TAria2.GetOptions(GID: TAria2GID): TRequestID;
+begin
+  Result := SendRequest('aria2.getOption', MakeStr(GID));
+end;
+
+function TAria2.ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): TRequestID;
+begin
+  Result := SendRequest('aria2.changeOption', MakeParams(['""', '""'],
+    [MakeStr(GID), OptionsToJson(Options)]));
+end;
+
+function TAria2.GetGlobalOptions: TRequestID;
+begin
+  Result := SendRequest('aria2.getGlobalOption', '');
+end;
+
+function TAria2.ChangeGlobalOptions(const Options: array of TAria2Option):TRequestID;
+begin
+  Result := SendRequest('aria2.changeGlobalOption', OptionsToJson(Options));
+end;
+
+function TAria2.GetGlobalStats: TRequestID;
+begin
+  Result := SendRequest('aria2.getGlobalStat', '');
+end;
+
+function TAria2.PurgeDownloadResult: TRequestID;
+begin
+  Result := SendRequest('aria2.purgeDownloadResult', '');
+end;
+
+function TAria2.RemoveDownloadResult(GID: TAria2GID): TRequestID;
+begin
+  Result := SendRequest('aria2.removeDownloadResult', MakeStr(GID));
+end;
+
+function TAria2.GetVersion: TRequestID;
+begin
+  Result := SendRequest('aria2.getVersion', '');
+end;
+
+function TAria2.GetSessionInfo: TRequestID;
+begin
+  Result := SendRequest('aria2.getSessionInfo', '');
+end;
+
+function TAria2.Shutdown(Force: Boolean): TRequestID;
+const
+  Method: array[Boolean] of string = ('aria2.shutdown', 'aria2.forceShutdown');
+begin
+  Result := SendRequest(Method[Force], '');
+end;
+
+function TAria2.SaveSession: TRequestID;
+begin
+  Result := SendRequest('aria2.saveSession', '');
+end;
+
+procedure TAria2.CheckResult(RequestID: TRequestID);
+begin
+  JsonFree(GetResult(RequestID));
+end;
+
+function TAria2.GetBool(RequestID: TRequestID): Boolean;
+begin
+  Result := GetString(RequestID) = 'OK';
+end;
+
+function TAria2.GetGID(RequestID: TRequestID): TAria2GID;
+begin
+  Result := GetString(RequestID);
+end;
+
+function TAria2.GetInt(RequestID: TRequestID): Integer;
 var
   Res: PJsonValue;
 begin
-  Res := SendRequest('aria2.changePosition', MakeParams(['""', '', ''], [MakeStr(GID), IntToStr(Pos), OriginValues[Origin]]));
+  Res := GetResult(RequestID);
   try
     Result := JsonInt(Res);
   finally
@@ -743,96 +847,74 @@ begin
   end;
 end;
 
-function TAria2.ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer): Cardinal;
+function TAria2.GetString(RequestID: TRequestID): string;
 var
   Res: PJsonValue;
 begin
-  Res := SendRequest('aria2.changeUri', MakeParams(['""', '', '[]', '[]', ''],
-    [MakeStr(GID), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]));
+  Res := GetResult(RequestID);
   try
-    Result := MakeDword(JsonInt(JsonItem(Res, 1)), JsonInt(JsonItem(Res, 0)));
+    Result := JsonStr(Res);
   finally
     JsonFree(Res);
   end;
 end;
 
-function TAria2.GetOptions(GID: TAria2GID): TAria2Struct;
+function TAria2.GetStruct(RequestID: TRequestID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getOption', MakeStr(GID)));
+  Result := TAria2Struct.Create(GetResult(RequestID));
 end;
 
-function TAria2.ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): Boolean;
+procedure TAria2.BeginBatch;
 begin
-  Result := SendRequestStr('aria2.changeOption', MakeParams(['""', '""'], [MakeStr(GID), OptionsToJson(Options)])) = 'OK';
+  if FBatchRequest <> '' then Exit;
+  FBatchLock.Acquire;
+  FRequestLock.Acquire;
+  try
+    FBatchRequest := '[';
+  finally
+    FRequestLock.Release;
+  end;
 end;
 
-function TAria2.GetGlobalOptions: TAria2Struct;
-begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getGlobalOption', ''));
-end;
-
-function TAria2.ChangeGlobalOptions(const Options: array of TAria2Option):
-  Boolean;
-begin
-  Result := SendRequestStr('aria2.changeGlobalOption', OptionsToJson(Options)) = 'OK';
-end;
-
-function TAria2.GetGlobalStats: TAria2Struct;
-begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getGlobalStat', ''));
-end;
-
-function TAria2.PurgeDownloadResult: Boolean;
-begin
-  Result := SendRequestStr('aria2.purgeDownloadResult', '') = 'OK';
-end;
-
-function TAria2.RemoveDownloadResult(GID: TAria2GID): Boolean;
-begin
-  Result := SendRequestStr('aria2.removeDownloadResult', MakeStr(GID)) = 'OK';
-end;
-
-function TAria2.GetVersion(Features: Boolean): string;
-const
-  Term: array[Boolean] of string = (', ', ')');
+procedure TAria2.EndBatch;
 var
   i: Integer;
   Res: PJsonValue;
 begin
-  Result := '';
-  Res := SendRequest('aria2.getVersion', '');
+  if FBatchRequest = '' then Exit;
+  Res := nil;
+  FRequestLock.Acquire;
   try
-    if Assigned(Res) then
-    begin
-      Result := JsonStr(JsonItem(Res, 'version'));
-      if Features then
-      begin
-        Result := Result + ' (features: ';
-        with JsonItem(Res, 'enabledFeatures')^ do
-          for i := 0 to Arr.Length - 1 do
-            Result := Result + JsonStr(Arr.Values[i]) + Term[i = Integer(Arr.Length) - 1];
-      end;
+    FBatchRequest[Length(FBatchRequest)] := ']';
+    if Length(FBatchRequest) > 2 then
+      Res := JsonParse(FOnRequest(Self, FBatchRequest));
+    if not Assigned(Res) or (Res.VType <> jtArray) then Exit;
+    for i := 0 to Res.Arr.Length - 1 do
+    try
+      AddResult(JsonExtractItem(Res, i));
+    except
     end;
   finally
-    JsonFree(Res);
+    FBatchRequest := '';
+    FRequestLock.Release;
+    FBatchLock.Release;
   end;
 end;
 
-function TAria2.GetSessionInfo: TAria2Struct;
+procedure TAria2.FreeResults;
+var
+  i: Integer;
 begin
-  Result := TAria2Struct.Create(SendRequest('aria2.getSessionInfo', ''));
-end;
-
-function TAria2.Shutdown(Force: Boolean): Boolean;
-const
-  Method: array[Boolean] of string = ('aria2.shutdown', 'aria2.forceShutdown');
-begin
-  Result := SendRequestStr(Method[Force], '') = 'OK';
-end;
-
-function TAria2.SaveSession: Boolean;
-begin
-  Result := SendRequestStr('aria2.saveSession', '') = 'OK';
+  FBatchLock.Acquire;
+  FRequestLock.Acquire;
+  try
+    for i := 0 to High(FResults) do
+      JsonFree(FResults[i]);
+    Finalize(FResults);
+  finally
+    FRequestLock.Release;
+    FBatchLock.Release;
+  end;
 end;
 
 function TAria2.AddToken(const Params: string): string;
@@ -847,50 +929,88 @@ begin
   Result := Result + Params;
 end;
 
-function TAria2.NewId: string;
+procedure TAria2.AddResult(Reply: PJsonValue);
+var
+  i: Integer;
+  ReplyID: PJsonValue;
 begin
-  Result := IntToHex(Random(MaxInt), 8);
+  ReplyID := JsonItem(Reply, 'id');
+  if not Assigned(ReplyID) or (ReplyID.VType <> jtInteger) then
+    if Assigned(JsonItem(Reply, 'error')) then
+      raise Exception.CreateFmt('Aria2: invalid reply (error %d: %s)',
+        [JsonInt(JsonItem(JsonItem(Reply, 'error'), 'code')),
+         JsonStr(JsonItem(JsonItem(Reply, 'error'), 'message'))])
+    else
+      raise Exception.Create('Aria2: invalid reply');
+  for i := 0 to High(FResults) do
+    if FResults[i] = nil then
+    begin
+      FResults[i] := Reply;
+      Exit;
+    end;
+  SetLength(FResults, Length(FResults) + 1);
+  FResults[High(FResults)] := Reply;
 end;
 
-function TAria2.SendRequest(const Method, Params: string): PJsonValue;
-const
-  RequestTemplate = '{"jsonrpc":"2.0","id":"%s","method":"%s","params":[%s]}';
+function TAria2.GetResult(RequestID: TRequestID): PJsonValue;
 var
-  Id: string;
-  Reply, ReplyId: PJsonValue;
+  i: Integer;
+  Res: PJsonValue;
 begin
+  Res := nil;
   Result := nil;
-  if not Assigned(FOnRequest) then
-    raise Exception.Create('Aria2: no transport provided');
-  Id := NewId;
-  Reply := JsonParse(FOnRequest(Self, '{"jsonrpc":"2.0","id":"' + Id + '","method":"' + Method + '","params":[' + AddToken(Params) + ']}'));
-  if not Assigned(Reply) then
-    raise Exception.Create('Aria2: invalid reply');
+  FBatchLock.Acquire;
   try
-    ReplyId := JsonItem(Reply, 'id');
-    if (JsonStr(ReplyId) <> Id) and (Assigned(ReplyId) and not (ReplyId.VType in [jtNone, jtNull])) then
-      raise Exception.Create('Aria2: reply id mismatch');
-    if Assigned(JsonItem(Reply, 'error')) then
-      raise Exception.CreateFmt('Aria2: request error %d: %s',
-        [JsonInt(JsonItem(JsonItem(Reply, 'error'), 'code')),
-         JsonStr(JsonItem(JsonItem(Reply, 'error'), 'message'))]);
-    Result := JsonExtractItem(Reply, 'result');
-    if not Assigned(Result) then
-      raise Exception.Create('Aria2: invalid reply');
+    FRequestLock.Acquire;
+    try
+      for i := 0 to High(FResults) do
+        if JsonInt(JsonItem(FResults[i], 'id')) = RequestID then
+        begin
+          Res := FResults[i];
+          FResults[i] := nil;
+          Break;
+        end;
+    finally
+      FRequestLock.Release;
+    end;
+    if not Assigned(Res) then
+      raise Exception.Create('Aria2: no reply');
+    try
+      if Assigned(JsonItem(Res, 'error')) then
+        raise Exception.CreateFmt('Aria2: request error %d: %s',
+          [JsonInt(JsonItem(JsonItem(Res, 'error'), 'code')),
+           JsonStr(JsonItem(JsonItem(Res, 'error'), 'message'))]);
+      Result := JsonExtractItem(Res, 'result');
+      if not Assigned(Result) then
+        raise Exception.Create('Aria2: invalid reply');
+    finally
+      JsonFree(Res);
+    end;
   finally
-    JsonFree(Reply);
+    FBatchLock.Release;
   end;
 end;
 
-function TAria2.SendRequestStr(const Method, Params: string): string;
+function TAria2.SendRequest(const Method, Params: string): TRequestID;
+const
+  RequestTemplate = '{"jsonrpc":"2.0","id":%d,"method":"%s","params":[';
 var
-  Res: PJsonValue;
+  Request: string;
 begin
-  Res := SendRequest(Method, Params);
+  Result := 0;
+  if not Assigned(FOnRequest) then
+    raise Exception.Create('Aria2: no transport provided');
+  FRequestLock.Acquire;
   try
-    Result := JsonStr(Res);
+    FCurID := Max(FCurId, 1) + 1;
+    Result := FCurID;
+    Request := Format(RequestTemplate, [Result, Method]) + AddToken(Params) + ']}';
+    if FBatchRequest = '' then
+      AddResult(JsonParse(FOnRequest(Self, Request)))
+    else
+      FBatchRequest := FBatchRequest + Request + ',';
   finally
-    JsonFree(Res);
+    FRequestLock.Release;
   end;
 end;
 

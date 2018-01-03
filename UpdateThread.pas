@@ -43,11 +43,12 @@ begin
 end;
 
 procedure TUpdateThread.Execute;
+var
+  NameIDs: TStringList;
 
   procedure FetchNames(List: TAria2Struct);
   var
     i: Integer;
-    Files: TAria2Struct;
   begin
     try
       for i := 0 to List.Length[''] - 1 do
@@ -55,16 +56,7 @@ procedure TUpdateThread.Execute;
         List.Index := i;
         if not List.Has[sfBittorrent] or (List[sfBTName] = '') then
         try
-          Files := FAria2.GetFiles(List[sfGID]);
-          Files.Index := 0;
-          try
-            if Files[sfPath] <> '' then
-              Names.Values[List[sfGID]] := ExtractFileName(Files[sfPath])
-            else
-              Names.Values[List[sfGID]] := ExtractFileName(Files[sfUris + '.0.' + sfUri]);
-          finally
-            FreeAndNil(Files);
-          end;
+          NameIDs.AddObject(List[sfGID], TObject(FAria2.GetFiles(List[sfGID])));
         except
         end;
       end;
@@ -73,35 +65,73 @@ procedure TUpdateThread.Execute;
     end;
   end;
 
+var
+  i: Integer;
+  ActiveID, WaitingID, StoppedID, InfoID: TRequestID;
+  Files: TAria2Struct;
 begin
   Stats := nil;
   Active := nil;
   Waiting := nil;
   Stopped := nil;
   Info := nil;
+  NameIDs := TStringList.Create;
   while not Terminated do
   begin
     try
       if Assigned(FOnBeforeUpdate) then
         Synchronize(FOnBeforeUpdate);
-      Stats := FAria2.GetGlobalStats;
+      with FAria2 do
+        Stats := GetStruct(GetGlobalStats);
       try
         if not StatsOnly then
         begin
-          Active := FAria2.TellActive(TransferKeys);
-          Waiting := FAria2.TellWaiting(0, Stats.Int[sfNumWaiting], TransferKeys);
-          Stopped := FAria2.TellStopped(0, Stats.Int[sfNumStopped], TransferKeys);
-          if InfoGID <> '' then
-          try
-            Info := FAria2.TellStatus(InfoGID, InfoKeys);
-          except
-            Info := nil;
+          with FAria2 do
+          begin
+            BeginBatch;
+            try
+              ActiveID := TellActive(TransferKeys);
+              WaitingID := TellWaiting(0, Stats.Int[sfNumWaiting], TransferKeys);
+              StoppedID := TellStopped(0, Stats.Int[sfNumStopped], TransferKeys);
+              if InfoGID <> '' then
+                InfoID := TellStatus(InfoGID, InfoKeys);
+            finally
+              EndBatch;
+            end;
+            Active := GetStruct(ActiveID);
+            Waiting := GetStruct(WaitingID);
+            Stopped := GetStruct(StoppedID);
+            if InfoGID <> '' then
+            try
+              Info := GetStruct(InfoID);
+            except
+              Info := nil;
+            end;
+            BeginBatch;
+            try
+              NameIDs.Clear;
+              Names.Clear;
+              FetchNames(Active);
+              FetchNames(Waiting);
+              FetchNames(Stopped);
+            finally
+              EndBatch;
+              for i := 0 to NameIDs.Count - 1 do
+              try
+                Files := GetStruct(TRequestID(NameIDs.Objects[i]));
+                Files.Index := 0;
+                try
+                  if Files[sfPath] <> '' then
+                    Names.Values[NameIDs[i]] := ExtractFileName(Files[sfPath])
+                  else
+                    Names.Values[NameIDs[i]] := ExtractFileName(Files[sfUris + '.0.' + sfUri]);
+                finally
+                  FreeAndNil(Files);
+                end;
+              except
+              end;
+            end;
           end;
-          if Names.Count > 500 then
-            Names.Clear;
-          FetchNames(Active);
-          FetchNames(Waiting);
-          FetchNames(Stopped);
         end;
         if Assigned(FOnUpdate) then
           Synchronize(FOnUpdate);
@@ -119,6 +149,7 @@ begin
       Sleep(5000);
     end;
   end;
+  NameIDs.Free;
 end;
 
 end.
