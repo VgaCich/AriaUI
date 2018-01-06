@@ -168,7 +168,7 @@ const
     'E&xit'#9'Alt-X');
   MenuTransfersCapt = '&Transfers';
   MenuTransfers: array[0..12] of PChar = ('2001',
-    '&Resume',
+    '&Resume', //TODO: restarting of failed transfers
     '&Pause',
     'R&emove',
     'Pr&operties...',
@@ -272,7 +272,7 @@ begin
   FRequestTransport := TRequestTransport.Create;
   FAria2 := TAria2.Create(FRequestTransport.SendRequest);
   FUpdateThread := TUpdateThread.Create(FAria2);
-  FUpdateThread.OnBeforeUpdate := UpdateKeys;
+  FUpdateThread.BeforeUpdate := UpdateKeys;
   FUpdateThread.OnUpdate := Refresh;
   MainMenu := TMenu.Create(Self, true, ['0']);
   AddMenu(MenuFileCapt, Ord(IDMenuFile), MenuFile);

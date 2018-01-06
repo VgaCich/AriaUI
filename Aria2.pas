@@ -57,8 +57,8 @@ type
     FBatchLock, FRequestLock: TCriticalSection;
     function AddToken(const Params: string): string;
     procedure AddResult(Reply: PJsonValue);
-    function GetResult(RequestID: TRequestID): PJsonValue;
   protected
+    function GetResult(RequestID: TRequestID): PJsonValue;
     function SendRequest(const Method, Params: string): TRequestID;
   public
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');

@@ -9,7 +9,7 @@ type
   TUpdateThread = class(TThread)
   private
     FAria2: TAria2;
-    FOnBeforeUpdate, FOnUpdate: TThreadMethod;
+    FBeforeUpdate, FOnUpdate: TThreadMethod;
   protected
     procedure Execute; override;
   public
@@ -20,7 +20,7 @@ type
     TransferKeys, InfoKeys: TStringArray;
     constructor Create(Aria2: TAria2);
     destructor Destroy; override;
-    property OnBeforeUpdate: TThreadMethod read FOnBeforeUpdate write FOnBeforeUpdate;
+    property BeforeUpdate: TThreadMethod read FBeforeUpdate write FBeforeUpdate;
     property OnUpdate: TThreadMethod read FOnUpdate write FOnUpdate;
   end;
 
@@ -79,8 +79,8 @@ begin
   while not Terminated do
   begin
     try
-      if Assigned(FOnBeforeUpdate) then
-        Synchronize(FOnBeforeUpdate);
+      if Assigned(FBeforeUpdate) then
+        Synchronize(FBeforeUpdate);
       with FAria2 do
         Stats := GetStruct(GetGlobalStats);
       try
@@ -124,7 +124,7 @@ begin
                   if Files[sfPath] <> '' then
                     Names.Values[NameIDs[i]] := ExtractFileName(Files[sfPath])
                   else
-                    Names.Values[NameIDs[i]] := ExtractFileName(Files[sfUris + '.0.' + sfUri]);
+                    Names.Values[NameIDs[i]] := DecodeURL(ExtractFileName(Files[sfUris + '.0.' + sfUri]));
                 finally
                   FreeAndNil(Files);
                 end;

@@ -19,6 +19,7 @@ function StrToEnum(const S: string; const Values: array of string): Integer;
 function MakeDword(Lo, Hi: Word): Cardinal;
 function Select(Exp: Boolean; const STrue, SFalse: string): string;
 function Check(Exp: Boolean; const STrue: string): string;
+function DecodeURL(const URL: string): string;
 
 const
   BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
@@ -134,6 +135,25 @@ begin
     Result := STrue
   else
     Result := '';
+end;
+
+function DecodeURL(const URL: string): string;
+const
+  HexChars = ['0' .. '9', 'a' .. 'f', 'A' .. 'F'];
+var
+  i: Integer;
+begin
+  Result := URL;
+  i := 1;
+  while i <= Length(Result) do
+  begin
+    if (Result[i] = '%') and (i < Length(Result) - 1) and (Result[i + 1] in HexChars) and (Result[i + 2] in HexChars) then
+    begin
+      Result[i] := Chr(HexToInt(Copy(Result, i + 1, 2)));
+      Delete(Result, i + 1, 2);
+    end;
+    Inc(i);
+  end;
 end;
 
 end.
