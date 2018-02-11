@@ -1,5 +1,8 @@
 unit MainForm;
 
+//TODO: Transfers sorting, filtering & searching
+//TODO: Uncaught exception on InfoPane tab switching (Files->Info)
+
 interface
 
 uses
@@ -57,6 +60,7 @@ type
       Item: Integer;
       Selected: TAria2GID;
     end;
+    FSearchString: string;
     procedure AddMetalink(Sender: TObject);
     procedure AddTorrent(Sender: TObject);
     procedure AddTransferKey(const Column: TListColumn);
@@ -68,6 +72,7 @@ type
     function Confirm(ID: Integer; const Message: string): Boolean;
     procedure EndTransfersUpdate;
     procedure ExitProgram;
+    procedure FindTransfer(From: Integer = -2);
     function FormClose(Sender: TObject): Boolean;
     procedure FormDestroy(Sender: TObject);
     function FormMinimize(Sender: TObject): Boolean;
@@ -146,7 +151,7 @@ type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
   TSBPart = (sbConnection, sbDownSpeed, sbUpSpeed, sbStats);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDFileSep0, IDExit,
-             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge,
+             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge, IDTransferSep2, IDFind, IDFindNext,
              IDMenuServer = 3000, IDServerOptions, IDServerVersion, IDSaveSession, IDShutdownServer,
              IDMenuHelp = 5000, IDAriaWebpage, IDAriaDocs, IDHelpSep0, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTrayPurge, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
@@ -167,7 +172,7 @@ const
     '-',
     'E&xit'#9'Alt-X');
   MenuTransfersCapt = '&Transfers';
-  MenuTransfers: array[0..12] of PChar = ('2001',
+  MenuTransfers: array[0..15] of PChar = ('2001',
     '&Resume', //TODO: restarting of failed transfers
     '&Pause',
     'R&emove',
@@ -177,14 +182,18 @@ const
     'Move &up',
     'Move &down',
     '-',
-    'Resume all',
-    'Pause all',
-    'Purge &completed');
+    'Res&ume all',
+    'Pau&se all',
+    'Purge &completed',
+    '-',
+    '&Find...',
+    'Find &next');
   MenuServerCapt = '&Server';
   MenuServer: array[0..4] of PChar = ('3001',
     'Server &options...',
     'Server &version...',
     '&Save session',
+    //TODO: custom request
     'Shut&down server');
   MenuHelpCapt = '&Help';
   MenuHelp: array[0..4] of PChar = ('5001',
@@ -453,6 +462,8 @@ begin
         IDPauseAll, IDTrayPauseAll: with FAria2 do CheckResult(PauseAll(GetKeyState(VK_SHIFT) < 0));
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then with FAria2 do CheckResult(PurgeDownloadResult);
         IDTrayPurge: with FAria2 do CheckResult(PurgeDownloadResult);
+        IDFind: FindTransfer;
+        IDFindNext: FindTransfer(TransfersList.SelectedIndex);
         IDServerOptions: FormServerOptions.Show;
         IDServerVersion: ShowServerVersion;
         IDSaveSession: with FAria2 do if GetBool(SaveSession) then ShowMessage('Session saved');
@@ -622,6 +633,26 @@ procedure TMainForm.ExitProgram;
 begin
   if Visible then Hide;
   Close;
+end;
+
+procedure TMainForm.FindTransfer(From: Integer);
+var
+  i: Integer;
+begin
+  if From = -2 then
+  begin
+    if not InputQuery(Handle, 'Find transfer', '', FSearchString) then Exit;
+    FSearchString := LowerCase(FSearchString);
+  end;
+  for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
+    if Pos(FSearchString, LowerCase(TransfersList.Items[i, 0])) > 0 then
+    begin
+      TransfersList.ClearSelection;
+      TransfersList.SelectedIndex := i;
+      TransfersList.Perform(LVM_ENSUREVISIBLE, i, 0);
+      Exit;
+    end;
+  MessageDlg('Not found', Caption, MB_ICONINFORMATION);
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;

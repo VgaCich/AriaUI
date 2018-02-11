@@ -4,6 +4,8 @@ interface
 
 uses
   AvL, avlSyncObjs, avlUtils, avlJSON, Base64;
+  
+//TODO: Time-based results purging & type cheking (ID: time:16|type:3-4?|ctr:12-13)
 
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
@@ -404,7 +406,7 @@ const
   ovSpeed = '<speed>';
   ovUriList = '<uri>[,uri]...';
   ovUser = '<username>';
-  Aria2Options: array[0..149] of TAria2Option = (
+  Aria2Options: array[0..149] of TAria2Option = ( //TODO
     (Key: soAllProxy; Value: ovProxy),
     (Key: soAllProxyPasswd; Value: ovPasswd),
     (Key: soAllProxyUser; Value: ovUser),
