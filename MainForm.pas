@@ -145,14 +145,14 @@ const
 implementation
 
 uses
-  OptionsForm, AddForm, ServerOptionsForm;
+  OptionsForm, AddForm, ServerOptionsForm, RPCRequestForm;
 
 type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
   TSBPart = (sbConnection, sbDownSpeed, sbUpSpeed, sbStats);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDFileSep0, IDExit,
              IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge, IDTransferSep2, IDFind, IDFindNext,
-             IDMenuServer = 3000, IDServerOptions, IDServerVersion, IDSaveSession, IDShutdownServer,
+             IDMenuServer = 3000, IDServerOptions, IDServerVersion, IDSaveSession, IDShutdownServer, IDRPCRequest,
              IDMenuHelp = 5000, IDAriaWebpage, IDAriaDocs, IDHelpSep0, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTrayPurge, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
 
@@ -189,12 +189,12 @@ const
     '&Find...',
     'Find &next');
   MenuServerCapt = '&Server';
-  MenuServer: array[0..4] of PChar = ('3001',
+  MenuServer: array[0..5] of PChar = ('3001',
     'Server &options...',
     'Server &version...',
     '&Save session',
-    //TODO: custom request
-    'Shut&down server');
+    'Shut&down server',
+    '&RPC Request...');
   MenuHelpCapt = '&Help';
   MenuHelp: array[0..4] of PChar = ('5001',
     'Aria2 &web page...',
@@ -468,6 +468,7 @@ begin
         IDServerVersion: ShowServerVersion;
         IDSaveSession: with FAria2 do if GetBool(SaveSession) then ShowMessage('Session saved');
         IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then with FAria2 do CheckResult(Shutdown(GetKeyState(VK_SHIFT) < 0));
+        IDRPCRequest: FormRPCRequest.ShowModal;
         IDAriaWebpage: Execute('http://aria2.github.io');
         IDAriaDocs: Execute('http://aria2.github.io/manual/en/html/index.html');
         IDAbout, IDTrayAbout: ShowAbout;

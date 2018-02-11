@@ -2,7 +2,7 @@ program AriaUI;
 
 uses
   SysSfIni, Windows, AvL, avlOneInstance, MainForm, OptionsForm, AddForm,
-  ServerOptionsForm;
+  ServerOptionsForm, RPCRequestForm;
 
 {$R *.res}
 {$R AriaUIRes.res}
@@ -25,6 +25,7 @@ begin
   FormOptions := TOptionsForm.Create(FormMain);
   FormAdd := TAddForm.Create(FormMain);
   FormServerOptions := TServerOptionsForm.Create(FormMain);
+  FormRPCRequest := TRPCRequestForm.Create(FormMain);
   FormMain.Run;
   FormMain.Free;
 end.
