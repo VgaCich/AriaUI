@@ -3,15 +3,16 @@ unit RPCRequestForm;
 interface
 
 uses
-  Windows, AvL, avlUtils, avlJSON, Aria2;
+  Windows, Messages, AvL, avlUtils, avlJSON, Aria2;
 
 type
   TRPCRequestForm = class(TForm)
     LMethod, LParams, LResult: TLabel;
     Method: TComboBox;
     Params, Result: TMemo;
-    BtnSend: TButton;
+    BtnSend, BtnEscape: TButton;
   private
+    procedure Escape(Sender: TObject);
     procedure Send(Sender: TObject);
   public
     constructor Create(AParent: TWinControl);
@@ -25,45 +26,30 @@ implementation
 uses
   Utils, MainForm;
 
+function EscapeParams(const S: string): string;
 const
-  RPCMethods: array[0..35] of string = (
-    'aria2.addUri (uris [options] [position])',
-    'aria2.addTorrent (torrent [uris] [options] position])',
-    'aria2.addMetalink (metalink [options] [position])',
-    'aria2.remove (gid)',
-    'aria2.forceRemove (gid)',
-    'aria2.pause (gid)',
-    'aria2.pauseAll',
-    'aria2.forcePause (gid)',
-    'aria2.forcePauseAll',
-    'aria2.unpause (gid)',
-    'aria2.unpauseAll',
-    'aria2.tellStatus (gid [keys])',
-    'aria2.getUris (gid)',
-    'aria2.getFiles (gid)',
-    'aria2.getPeers (gid)',
-    'aria2.getServers (gid)',
-    'aria2.tellActive ([keys])',
-    'aria2.tellWaiting (offset num [keys])',
-    'aria2.tellStopped (offset num [keys])',
-    'aria2.changePosition (gid pos how)',
-    'aria2.changeUri (gid fileIndex delUris addUris [position])',
-    'aria2.getOption (gid)',
-    'aria2.changeOption (gid options)',
-    'aria2.getGlobalOption',
-    'aria2.changeGlobalOption (options)',
-    'aria2.getGlobalStat',
-    'aria2.purgeDownloadResult',
-    'aria2.removeDownloadResult (gid)',
-    'aria2.getVersion',
-    'aria2.getSessionInfo',
-    'aria2.shutdown',
-    'aria2.forceShutdown',
-    'aria2.saveSession',
-    'system.multicall (methods)',
-    'system.listMethods',
-    'system.listNotifications'
-  );
+  Esc: array[0..7] of record C: Char; R: string; end = (
+    (C: '"'; R: '\"'), (C: '\'; R: '\\'),
+    (C: '/'; R: '\/'), (C: #$08; R: '\b'),
+    (C: #$09; R: '\t'), (C: #$0A; R: '\n'),
+    (C: #$0C; R: '\f'), (C: #$0D; R: '\r'));
+var
+  i, j: Integer;
+label
+  Next;
+begin
+  for i := 1 to Length(S) do
+  begin
+    for j := Low(Esc) to High(Esc) do
+      if S[i] = Esc[j].C then
+      begin
+        Result := Result + Esc[j].R;
+        goto Next;
+      end;
+    Result := Result + S[i];
+    Next:
+  end;
+end;
 
 type
   TAria2G = class(TAria2)
@@ -91,13 +77,13 @@ begin
   LMethod := TLabel.Create(Self, 'Method:');
   LMethod.SetBounds(5, 5, ClientWidth - 90, 15);
   LParams := TLabel.Create(Self, 'Parameters:');
-  LParams.SetBounds(5, 50, ClientWidth - 10, 15);
+  LParams.SetBounds(5, 50, ClientWidth - 90, 15);
   LResult := TLabel.Create(Self, 'Result:');
   LResult.SetBounds(5, 170, ClientWidth - 10, 15);
   Method := TComboBox.Create(Self, csDropDown);
   Method.SetBounds(5, 20, ClientWidth - 90, 24);
-  for i := 0 to High(RPCMethods) do
-    Method.ItemAdd(RPCMethods[i]);
+  for i := 0 to High(Aria2Methods) do
+    Method.ItemAdd(Aria2Methods[i]);
   Params := TMemo.Create(Self, '');
   Params.SetBounds(5, 65, ClientWidth - 10, 100);
   Result := TMemo.Create(Self, '');
@@ -105,8 +91,18 @@ begin
   Result.Style := Result.Style or WS_VSCROLL or WS_HSCROLL;
   Result.ReadOnly := true;
   BtnSend := TButton.Create(Self, 'Send');
-  BtnSend.SetBounds(ClientWidth - 80, 20, 75, 25);
+  BtnSend.SetBounds(ClientWidth - 80, 5, 75, 25);
   BtnSend.OnClick := Send;
+  BtnEscape := TButton.Create(Self, 'Escape');
+  BtnEscape.SetBounds(ClientWidth - 80, 35, 75, 25);
+  BtnEscape.OnClick := Escape;
+end;
+
+procedure TRPCRequestForm.Escape(Sender: TObject);
+begin
+  if Params.SelLength = 0 then
+    Params.Perform(EM_SETSEL, 0, -1);
+  Params.SelText := EscapeParams(Params.SelText);
 end;
 
 procedure TRPCRequestForm.Send(Sender: TObject);
@@ -114,6 +110,7 @@ var
   S: string;
   Res: PJsonValue;
 begin
+  Result.Text := '';
   try
     S := Method.Text;
     Res := TAria2G(FormMain.Aria2).SendRequest(Tok(' ', S), Params.Text);

@@ -312,7 +312,7 @@ end;
 destructor TPageSpeed.Destroy;
 begin
   FreeAndNil(FTimer);
-  EventBus.RemoveListener(UpdateGraph);
+  EventBus.RemoveListeners([UpdateGraph, ServerChanged]);
   inherited;
 end;
 

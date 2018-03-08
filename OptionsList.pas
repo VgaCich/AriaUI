@@ -1,6 +1,7 @@
 unit OptionsList;
 
 //TODO: Options description
+//TODO: Save values history?
 
 interface
 
@@ -74,7 +75,7 @@ begin
   SetWindowLong(Handle, GWL_USERDATA, SetWindowLong(Handle, GWL_WNDPROC, Longint(@MsgHookProc)));
   if GetWindowLong(ParentHandle, GWL_WNDPROC) <> Integer(@ParentHookProc) then //TODO: Check other hooks too!
     PrevWndProc := Pointer(SetWindowLong(ParentHandle, GWL_WNDPROC, Longint(@ParentHookProc)));
-  Value := TComboBox.Create(Self, csDropDown);
+  Value := TComboBox.Create(Self, csDropDown); //TODO: apply on selecting value from drop-down list
   Value.Visible := false;
   Value.OnKeyUp := ValueKeyUp;
   SetWindowLong(GetWindow(Value.Handle, GW_CHILD), GWL_USERDATA,

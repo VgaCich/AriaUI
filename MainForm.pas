@@ -7,8 +7,8 @@ interface
 
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, Utils, Aria2, RequestTransport,
-  UpdateThread, InfoPane;
+  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, avlMasks, Utils, Aria2,
+  RequestTransport, UpdateThread, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
@@ -161,7 +161,7 @@ const
   AboutIcon = 'MAINICON';
   AboutCaption = 'About ';
   AboutText = 'Aria UI 1.0 alpha'+CRLF+CRLF+
-              'Copyright '#169' VgaSoft, 2017'+CRLF+
+              'Copyright '#169' VgaSoft, 2017-2018'+CRLF+
               'vgasoft@gmail.com';
   MenuFileCapt = '&File';
   MenuFile: array[0..6] of PChar = ('1001',
@@ -581,7 +581,7 @@ const
   Options: array[0..1] of TAria2Option = ((Key: soBTSeedUnverified; Value: svFalse), (Key: soCheckIntegrity; Value: svTrue));
 begin
   with FAria2 do
-    Result := GetBool(ChangeOptions(GID, Options));
+    Result := GetBool(ChangeOptions(GID, Options)); //TODO: Revert options on completion
 end;
 
 procedure TMainForm.ClearStatusBar;
@@ -639,21 +639,24 @@ end;
 procedure TMainForm.FindTransfer(From: Integer);
 var
   i: Integer;
+  Mask: TMask;
 begin
-  if From = -2 then
-  begin
-    if not InputQuery(Handle, 'Find transfer', '', FSearchString) then Exit;
-    FSearchString := LowerCase(FSearchString);
+  if (From = -2) and not InputQuery(Handle, 'Find transfer', 'Search mask:', FSearchString) then Exit;
+  Mask := TMask.Create(FSearchString);
+  try
+    for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
+      if Mask.Matches(TransfersList.Items[i, 0]) then
+      begin
+        TransfersList.ClearSelection;
+        TransfersList.SelectedIndex := i;
+        TransfersList.Perform(LVM_ENSUREVISIBLE, i, 0);
+        TransfersList.SetFocus;
+        Exit;
+      end;
+    MessageDlg('Not found', Caption, MB_ICONINFORMATION);
+  finally
+    Mask.Free;
   end;
-  for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
-    if Pos(FSearchString, LowerCase(TransfersList.Items[i, 0])) > 0 then
-    begin
-      TransfersList.ClearSelection;
-      TransfersList.SelectedIndex := i;
-      TransfersList.Perform(LVM_ENSUREVISIBLE, i, 0);
-      Exit;
-    end;
-  MessageDlg('Not found', Caption, MB_ICONINFORMATION);
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;
