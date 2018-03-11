@@ -1,6 +1,7 @@
 unit OptionsList;
 
 //TODO: Options description
+//TODO: Go to webdocs on F1 in options list (or embedded help?)
 //TODO: Save values history?
 
 interface

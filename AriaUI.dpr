@@ -11,7 +11,7 @@ var
   PrevWnd: THandle;
 
 begin
-  if IsRunning(AppName) then
+  if IsRunning(AppName) then //TODO: Pass options like files for open
   begin
     PrevWnd := FindWindow('TMainForm', AppCaption);
     ShowWindow(PrevWnd, SW_SHOW);

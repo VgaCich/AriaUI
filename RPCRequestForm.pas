@@ -61,7 +61,7 @@ type
 
 function TAria2G.SendRequest(const Method, Params: string): PJsonValue;
 begin
-  Result := GetResult(inherited SendRequest(Method, Params));
+  Result := GetResult(inherited SendRequest(Method, Params, rvtUnknown), rvtUnknown);
 end;
 
 { TRPCRequestForm }

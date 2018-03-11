@@ -1,15 +1,16 @@
 unit Aria2;
 
+//TODO: option groups (input/global/cli/etc)
+
 interface
 
 uses
-  AvL, avlSyncObjs, avlUtils, avlJSON, Base64;
-  
-//TODO: Time-based results purging & type cheking (ID: time:16|type:3-4?|ctr:12-13)
+  Windows, AvL, avlSyncObjs, avlUtils, avlJSON, Base64;
 
 type
   TOnRPCRequest = function(Sender: TObject; const Request: string): string of object;
   TRequestID = Cardinal;
+  TAria2RequestValueType = (rvtUnknown, rvtBool, rvtInt, rvtString, rvtGID, rvtStruct);
   TAria2GID = string;
   TAria2GIDArray = array of TAria2GID;
   TAria2PosOrigin = (poFromBeginning, poFromCurrent, poFromEnd);
@@ -53,15 +54,16 @@ type
   private
     FOnRequest: TOnRPCRequest;
     FRPCSecret: string;
-    FCurID: TRequestID;
+    FCurID: Word;
     FBatchRequest: string;
     FResults: array of PJsonValue;
     FBatchLock, FRequestLock: TCriticalSection;
     function AddToken(const Params: string): string;
     procedure AddResult(Reply: PJsonValue);
   protected
-    function GetResult(RequestID: TRequestID): PJsonValue;
-    function SendRequest(const Method, Params: string): TRequestID;
+    function GetResult(RequestID: TRequestID; ValueType: TAria2RequestValueType): PJsonValue;
+    function SendRequest(const Method, Params: string; ValueType: TAria2RequestValueType): TRequestID;
+    procedure FreeResults;
   public
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');
     destructor Destroy; override;
@@ -90,19 +92,18 @@ type
     function GetGlobalStats: TRequestID; //Struct
     function PurgeDownloadResult: TRequestID; //Bool
     function RemoveDownloadResult(GID: TAria2GID): TRequestID; //Bool
-    function GetVersion: TRequestID;
+    function GetVersion: TRequestID; //Struct
     function GetSessionInfo: TRequestID; //Struct
     function Shutdown(Force: Boolean = false): TRequestID; //Bool
     function SaveSession: TRequestID; //Bool
     procedure CheckResult(RequestID: TRequestID);
     function GetBool(RequestID: TRequestID): Boolean;
     function GetInt(RequestID: TRequestID): Integer;
-    function GetString(RequestID: TRequestID): string;
+    function GetString(RequestID: TRequestID; ValueType: TAria2RequestValueType = rvtString): string;
     function GetGID(RequestID: TRequestID): TAria2GID;
     function GetStruct(RequestID: TRequestID): TAria2Struct;
     procedure BeginBatch;
     procedure EndBatch;
-    procedure FreeResults;
     property OnRequest: TOnRPCRequest read FOnRequest write FOnRequest;
     property RPCSecret: string read FRPCSecret write FRPCSecret;
   end;
@@ -302,12 +303,18 @@ const
   soSaveSession = 'save-session';
   soServerStatOf = 'server-stat-of';
   //CLI-only options
+  soAsyncDNSServer = 'async-dns-server';
+  soAutosaveInterval= 'auto-save-interval';
   soBTDetachSeedOnly = 'detach-seed-only';
   soBTLoadSavedMetadata = 'bt-load-saved-metadata';
   soBTLPDInterface = 'bt-lpd-interface';
   soCACertificate = 'ca-certificate';
   soCertificate = 'certificate';
   soCheckCertificate = 'check-certificate';
+  soConfPath = 'conf-path';
+  soConsoleLogLevel = 'console-log-level';
+  soDaemon = 'daemon';
+  soDeferredInput = 'deferred-input';
   soDHTEntryPoint = 'dht-entry-point';
   soDHTEntryPoint6 = 'dht-entry-point6';
   soDHTFilePath = 'dht-file-path';
@@ -315,43 +322,97 @@ const
   soDHTListenAddr6 = 'dht-listen-addr6';
   soDHTListenPort = 'dht-listen-port';
   soDHTMessageTimeout = 'dht-message-timeout';
+  soDisableIPv6 = 'disable-ipv6';
+  soDiskCache = 'disk-cache';
+  soDscp = 'dscp';
+  soEnableColor = 'enable-color';
   soEnableDHT = 'enable-dht';
   soEnableDHT6 = 'enable-dht6';
+  soEnableRPC = 'enable-rpc';
+  soEventPoll = 'event-poll';
+  soForceSequential = 'force-sequential';
   soHelp = 'help';
+  soHumanReadable = 'human-readable';
   soInputFile = 'input-file';
+  soInterface = 'interface';
   soListenPort = 'listen-port';
   soLoadCookies = 'load-cookies';
   soMetalinkFile = 'metalink-file';
+  soMinTLSVersion = 'min-tls-version';
+  soMultipleInterface = 'multiple-interface';
   soNetrcPath = 'netrc-path';
+  soNoConf= 'no-conf';
+  soOnBTDownloadComplete = 'on-bt-download-complete';
+  soOnDownloadComplete = 'on-download-complete';
+  soOnDownloadError = 'on-download-error';
+  soOnDownloadPause = 'on-download-pause';
+  soOnDownloadStart = 'on-download-start';
+  soOnDownloadStop = 'on-download-stop';
   soPeerAgent = 'peer-agent';
   soPeerIDPrefix = 'peer-id-prefix';
   soPrivateKey = 'private-key';
+  soQuiet = 'quiet';
+  soRlimitNofile = 'rlimit-nofile';
+  soRPCAllowOriginAll = 'rpc-allow-origin-all';
+  soRPCCertificate = 'rpc-certificate';
+  soRPCListenAll = 'rpc-listen-all';
+  soRPCListenPort = 'rpc-listen-port';
+  soRPCMaxRequestSize = 'rpc-max-request-size';
+  soRPCPasswd = 'rpc-passwd';
+  soRPCPrivateKey = 'rpc-private-key';
+  soRPCSecret = 'rpc-secret';
+  soRPCSecure = 'rpc-secure';
+  soRPCUser = 'rpc-user';
+  soSaveNotFound = 'save-not-found';
+  soSaveSessionInterval = 'save-session-interval';
   soServerStatIf = 'server-stat-if';
   soServerStatTimeout = 'server-stat-timeout';
+  soShowConsoleReadout = 'show-console-readout';
   soShowFiles = 'show-files';
+  soSocketRecvBufferSize = 'socket-recv-buffer-size';
+  soStderr = 'stderr';
+  soStop = 'stop';
+  soStopWithProcess = 'stop-with-process';
+  soSummaryInterval = 'summary-interval';
   soTorrentFile = 'torrent-file';
+  soTruncateConsoleReadout = 'truncate-console-readout';
   //Options values
   svAdaptive = 'adaptive';
   svArc4 = 'arc4';
   svAscii = 'ascii';
   svBinary = 'binary';
+  svDebug = 'debug';
   svDefault = 'default';
+  svEpoll = 'epoll';
+  svError = 'error';
+  svFalloc = 'falloc';
   svFalse = 'false';
   svFeedback = 'feedback';
   svFtp = 'ftp';
+  svFull = 'full';
   svGeom = 'geom';
   svGet = 'get';
   svHead = 'head';
+  svHide = 'hide';
   svHttp = 'http';
   svHttps = 'https';
+  svInfo = 'info';
   svInOrder = 'inorder';
+  svKqueue = 'kqueue';
   svMem = 'mem';
   svNone = 'none';
+  svNotice = 'notice';
   svPlain = 'plain';
+  svPoll = 'poll';
+  svPort = 'port';
+  svPrealloc= 'prealloc';
   svRandom = 'random';
+  svSelect = 'select';
   svTail = 'tail';
   svTrue = 'true';
+  svTrunc = 'trunc';
   svTunnel = 'tunnel';
+  svWarn = 'warn';
   //Error/exit codes
   aeSuccessful = 0;
   aeUnknownError = 1;
@@ -391,10 +452,12 @@ const
   ovAddr = '<addr>';
   ovBoolean = svFalse + OSep + svTrue;
   ovChecksum = '<type>=<digest>';
+  ovCommand = '<command>';
   ovFile = '<file>';
   ovHostPort = '<host>:<port>';
   ovInterface = '<interface>';
   ovIPAddress = '<ip address>';
+  ovLogLevel = svDebug + OSep + svInfo + OSep + svNotice + OSep + svWarn + OSep + svError;
   ovNum = '<num>';
   ovPath = '<path>';
   ovPort = '<port>';
@@ -406,7 +469,8 @@ const
   ovSpeed = '<speed>';
   ovUriList = '<uri>[,uri]...';
   ovUser = '<username>';
-  Aria2Options: array[0..149] of TAria2Option = ( //TODO
+  ovVersion = '<version>';
+  Aria2Options: array[0..194] of TAria2Option = (
     (Key: soAllProxy; Value: ovProxy),
     (Key: soAllProxyPasswd; Value: ovPasswd),
     (Key: soAllProxyUser; Value: ovUser),
@@ -447,7 +511,7 @@ const
     (Key: soEnableHttpPipelining; Value: ovBoolean),
     (Key: soEnableMmap; Value: ovBoolean),
     (Key: soEnablePeerExchange; Value: ovBoolean),
-    (Key: soFileAllocation; Value: ''),
+    (Key: soFileAllocation; Value: svNone + OSep + svPrealloc + OSep + svTrunc + OSep + svFalloc),
     (Key: soFollowMetalink; Value: ovBoolean + OSep + svMem),
     (Key: soFollowTorrent; Value: ovBoolean + OSep + svMem),
     (Key: soForceSave; Value: ovBoolean),
@@ -459,7 +523,7 @@ const
     (Key: soFtpReuseConnection; Value: ovBoolean),
     (Key: soFtpType; Value: svAscii + OSep + svBinary),
     (Key: soFtpUser; Value: ovUser),
-    (Key: soGID; Value: ''),
+    (Key: soGID; Value: '<gid>'),
     (Key: soHashCheckOnly; Value: ovBoolean),
     (Key: soHeader; Value: '<header>'),
     (Key: soHttpAcceptGzip; Value: ovBoolean),
@@ -476,10 +540,10 @@ const
     (Key: soIndexOut; Value: '<index>=<path>'),
     (Key: soLowestSpeedLimit; Value: ovSpeed),
     (Key: soMaxConnectionPerServer; Value: ovNum),
-    (Key: soMaxDownloadLimit; Value: ''),
+    (Key: soMaxDownloadLimit; Value: ovSpeed),
     (Key: soMaxFileNotFound; Value: ovNum),
-    (Key: soMaxMmapLimit; Value: ''),
-    (Key: soMaxResumeFailureTries; Value: ''),
+    (Key: soMaxMmapLimit; Value: ovSize),
+    (Key: soMaxResumeFailureTries; Value: ovNum),
     (Key: soMaxTries; Value: ovNum),
     (Key: soMaxUploadLimit; Value: ovSpeed),
     (Key: soMetalinkBaseUri; Value: '<uri>'),
@@ -488,16 +552,16 @@ const
     (Key: soMetalinkLocation; Value: '<location>[,location]...'),
     (Key: soMetalinkOS; Value: '<os>'),
     (Key: soMetalinkPreferredProtocol; Value: svFtp + OSep + svHttp + OSep + svHttps + OSep + svNone),
-    (Key: soMetalinkVersion; Value: '<version>'),
+    (Key: soMetalinkVersion; Value: ovVersion),
     (Key: soMinSplitSize; Value: ovSize),
-    (Key: soNoFileAllocationLimit; Value: ''),
+    (Key: soNoFileAllocationLimit; Value: ovSize),
     (Key: soNoNetrc; Value: ovBoolean),
     (Key: soNoProxy; Value: '<domains>'),
     (Key: soOut; Value: ovFile),
     (Key: soParameterizedUri; Value: ovBoolean),
     (Key: soPause; Value: ovBoolean),
     (Key: soPauseMetadata; Value: ovBoolean),
-    (Key: soPieceLength; Value: ''),
+    (Key: soPieceLength; Value: ovSize),
     (Key: soProxyMethod; Value: svGet + OSep + svTunnel),
     (Key: soRealtimeChunkChecksum; Value: ovBoolean),
     (Key: soReferer; Value: '<referer>'),
@@ -518,25 +582,31 @@ const
     (Key: soUserAgent; Value: '<user agent>'),
     //Global options
     (Key: soBTMaxOpenFiles; Value: ovNum),
-    (Key: soDownloadResult; Value: ''),
+    (Key: soDownloadResult; Value: svDefault + OSep + svFull + OSep + svHide),
     (Key: soKeepUnfinishedDownloadResult; Value: ovBoolean),
     (Key: soLog; Value: '<log>'),
-    (Key: soLogLevel; Value: ''),
+    (Key: soLogLevel; Value: ovLogLevel),
     (Key: soMaxConcurrentDownloads; Value: ovNum),
-    (Key: soMaxDownloadResult; Value: ''),
+    (Key: soMaxDownloadResult; Value: ovNum),
     (Key: soMaxOverallDownloadLimit; Value: ovSpeed),
     (Key: soMaxOverallUploadLimit; Value: ovSpeed),
     (Key: soOptimizeConcurrentDownloads; Value: ovBoolean + OSep + '<A>:<B>'),
     (Key: soSaveCookies; Value: ovFile),
-    (Key: soSaveSession; Value: ''),
+    (Key: soSaveSession; Value: ovFile),
     (Key: soServerStatOf; Value: ovFile),
     //CLI-only options
+    (Key: soAsyncDNSServer; Value: '<ip>[,ip]...'),
+    (Key: soAutosaveInterval; Value: ovSec),
     (Key: soBTDetachSeedOnly; Value: ovBoolean),
     (Key: soBTLoadSavedMetadata; Value: ovBoolean),
     (Key: soBTLPDInterface; Value: ovInterface),
     (Key: soCACertificate; Value: ovFile),
     (Key: soCertificate; Value: ovFile),
     (Key: soCheckCertificate; Value: ovBoolean),
+    (Key: soConfPath; Value: ovPath),
+    (Key: soConsoleLogLevel; Value: ovLogLevel),
+    (Key: soDaemon; Value: ovBoolean),
+    (Key: soDeferredInput; Value: ovBoolean),
     (Key: soDHTEntryPoint; Value: ovHostPort),
     (Key: soDHTEntryPoint6; Value: ovHostPort),
     (Key: soDHTFilePath; Value: ovPath),
@@ -544,21 +614,60 @@ const
     (Key: soDHTListenAddr6; Value: ovAddr),
     (Key: soDHTListenPort; Value: ovPorts),
     (Key: soDHTMessageTimeout; Value: ovSec),
+    (Key: soDisableIPv6; Value: ovBoolean),
+    (Key: soDiskCache; Value: ovSize),
+    (Key: soDscp; Value: 'dscp>'),
+    (Key: soEnableColor; Value: ovBoolean),
     (Key: soEnableDHT; Value: ovBoolean),
     (Key: soEnableDHT6; Value: ovBoolean),
+    (Key: soEnableRPC; Value: ovBoolean),
+    (Key: soEventPoll; Value: svEpoll + OSep + svKqueue + OSep + svPort + OSep + svPoll + OSep + svSelect),
+    (Key: soForceSequential; Value: ovBoolean),
     (Key: soHelp; Value: '<tag>|<keyword>'),
+    (Key: soHumanReadable; Value: ovBoolean),
     (Key: soInputFile; Value: ovFile),
+    (Key: soInterface; Value: ovInterface),
     (Key: soListenPort; Value: ovPorts),
     (Key: soLoadCookies; Value: ovFile),
     (Key: soMetalinkFile; Value: ovFile),
+    (Key: soMinTLSVersion; Value: ovVersion),
+    (Key: soMultipleInterface; Value: '<interfaces>'),
     (Key: soNetrcPath; Value: ovPath),
+    (Key: soNoConf; Value: ovBoolean),
+    (Key: soOnBTDownloadComplete; Value: ovCommand),
+    (Key: soOnDownloadComplete; Value: ovCommand),
+    (Key: soOnDownloadError; Value: ovCommand),
+    (Key: soOnDownloadPause; Value: ovCommand),
+    (Key: soOnDownloadStart; Value: ovCommand),
+    (Key: soOnDownloadStop; Value: ovCommand),
     (Key: soPeerAgent; Value: '<peer agent'),
     (Key: soPeerIDPrefix; Value: '<prefix>'),
     (Key: soPrivateKey; Value: ovFile),
+    (Key: soQuiet; Value: ovBoolean),
+    (Key: soRlimitNofile; Value: ovNum),
+    (Key: soRPCAllowOriginAll; Value: ovBoolean),
+    (Key: soRPCCertificate; Value: ovFile),
+    (Key: soRPCListenAll; Value: ovBoolean),
+    (Key: soRPCListenPort; Value: ovPort),
+    (Key: soRPCMaxRequestSize; Value: ovSize),
+    (Key: soRPCPasswd; Value: ovPasswd),
+    (Key: soRPCPrivateKey; Value: ovFile),
+    (Key: soRPCSecret; Value: '<token>'),
+    (Key: soRPCSecure; Value: ovBoolean),
+    (Key: soRPCUser; Value: ovUser),
+    (Key: soSaveNotFound; Value: ovBoolean),
+    (Key: soSaveSessionInterval; Value: ovSec),
     (Key: soServerStatIf; Value: ovFile),
     (Key: soServerStatTimeout; Value: ovSec),
+    (Key: soShowConsoleReadout; Value: ovBoolean),
     (Key: soShowFiles; Value: ovBoolean),
-    (Key: soTorrentFile; Value: ovFile));
+    (Key: soSocketRecvBufferSize; Value: ovSize),
+    (Key: soStderr; Value: ovBoolean),
+    (Key: soStop; Value: ovSec),
+    (Key: soStopWithProcess; Value: '<pid>'),
+    (Key: soSummaryInterval; Value: ovSec),
+    (Key: soTorrentFile; Value: ovFile),
+    (Key: soTruncateConsoleReadout; Value: ovBoolean));
   Aria2Methods: array[0..35] of string = (
     'aria2.addUri (uris [options] [position])',
     'aria2.addTorrent (torrent [uris] [options] position])',
@@ -601,6 +710,14 @@ implementation
 
 uses
   Utils;
+
+const
+  TimeMask = $FFFFF;
+  TimeShift = 11;
+  ValueTypeMask = $07;
+  ValueTypeShift = 8;
+  CtrMask = $FF;
+  CtrShift = 0;
 
 function Escape(C: Char): string;
 const
@@ -698,93 +815,93 @@ end;
 function TAria2.AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
   Result := SendRequest('aria2.addUri', MakeParams(['', '{}', ''],
-    [ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
+    [ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtGID);
 end;
 
 function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
   Result := SendRequest('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
-    ['"' + Base64Encode(Torrent) + '"', ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
+    ['"' + Base64Encode(Torrent) + '"', ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtGID);
 end;
 
 function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
   Result := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
-    ['"' + Base64Encode(Metalink) + '"', OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]));
+    ['"' + Base64Encode(Metalink) + '"', OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtStruct);
 end;
 
 function TAria2.Remove(GID: TAria2GID; Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.remove', 'aria2.forceRemove');
 begin
-  Result := SendRequest(Method[Force], MakeStr(GID));
+  Result := SendRequest(Method[Force], MakeStr(GID), rvtGID);
 end;
 
 function TAria2.Pause(GID: TAria2GID; Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.pause', 'aria2.forcePause');
 begin
-  Result := SendRequest(Method[Force], MakeStr(GID));
+  Result := SendRequest(Method[Force], MakeStr(GID), rvtGID);
 end;
 
 function TAria2.PauseAll(Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.pauseAll', 'aria2.forcePauseAll');
 begin
-  Result := SendRequest(Method[Force], '');
+  Result := SendRequest(Method[Force], '', rvtBool);
 end;
 
 function TAria2.Unpause(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.unpause', MakeStr(GID));
+  Result := SendRequest('aria2.unpause', MakeStr(GID), rvtGID);
 end;
 
 function TAria2.UnpauseAll: TRequestID;
 begin
-  Result := SendRequest('aria2.unpauseAll', '');
+  Result := SendRequest('aria2.unpauseAll', '', rvtBool);
 end;
 
 function TAria2.TellStatus(GID: TAria2GID; const Keys: array of string): TRequestID;
 begin
   Result := SendRequest('aria2.tellStatus', MakeParams(['""', ''],
-    [MakeStr(GID), ArrayToJson(Keys)]));
+    [MakeStr(GID), ArrayToJson(Keys)]), rvtStruct);
 end;
 
 function TAria2.GetUris(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.getUris', MakeStr(GID));
+  Result := SendRequest('aria2.getUris', MakeStr(GID), rvtStruct);
 end;
 
 function TAria2.GetFiles(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.getFiles', MakeStr(GID));
+  Result := SendRequest('aria2.getFiles', MakeStr(GID), rvtStruct);
 end;
 
 function TAria2.GetPeers(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.getPeers', MakeStr(GID));
+  Result := SendRequest('aria2.getPeers', MakeStr(GID), rvtStruct);
 end;
 
 function TAria2.GetServers(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.getServers', MakeStr(GID));
+  Result := SendRequest('aria2.getServers', MakeStr(GID), rvtStruct);
 end;
 
 function TAria2.TellActive(const Keys: array of string): TRequestID;
 begin
-  Result := SendRequest('aria2.tellActive', ArrayToJson(Keys));
+  Result := SendRequest('aria2.tellActive', ArrayToJson(Keys), rvtStruct);
 end;
 
 function TAria2.TellWaiting(Offset, Num: Integer; const Keys: array of string): TRequestID;
 begin
   Result := SendRequest('aria2.tellWaiting', MakeParams(['', '', ''],
-    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
+    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]), rvtStruct);
 end;
 
 function TAria2.TellStopped(Offset, Num: Integer; const Keys: array of string): TRequestID;
 begin
   Result := SendRequest('aria2.tellStopped', MakeParams(['', '', ''],
-    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]));
+    [IntToStr(Offset), IntToStr(Num), ArrayToJson(Keys)]), rvtStruct);
 end;
 
 function TAria2.ChangePosition(GID: TAria2GID; Pos: Integer; Origin: TAria2PosOrigin): TRequestID;
@@ -792,93 +909,93 @@ const
   OriginValues: array[TAria2PosOrigin] of string = ('"POS_SET"', '"POS_CUR"', '"POS_END"');
 begin
   Result := SendRequest('aria2.changePosition', MakeParams(['""', '', ''],
-    [MakeStr(GID), IntToStr(Pos), OriginValues[Origin]]));
+    [MakeStr(GID), IntToStr(Pos), OriginValues[Origin]]), rvtInt);
 end;
 
 function TAria2.ChangeUri(GID: TAria2GID; FileIndex: Integer; const DelUris, AddUris: string; Position: Integer): TRequestID;
 begin
   Result := SendRequest('aria2.changeUri', MakeParams(['""', '', '[]', '[]', ''],
-    [MakeStr(GID), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]));
+    [MakeStr(GID), IntToStr(FileIndex), ArrayToJson(DelUris), ArrayToJson(AddUris), Check(Position >= 0, IntToStr(Position))]), rvtStruct);
 end;
 
 function TAria2.GetOptions(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.getOption', MakeStr(GID));
+  Result := SendRequest('aria2.getOption', MakeStr(GID), rvtStruct);
 end;
 
 function TAria2.ChangeOptions(GID: TAria2GID; const Options: array of TAria2Option): TRequestID;
 begin
   Result := SendRequest('aria2.changeOption', MakeParams(['""', '""'],
-    [MakeStr(GID), OptionsToJson(Options)]));
+    [MakeStr(GID), OptionsToJson(Options)]), rvtBool);
 end;
 
 function TAria2.GetGlobalOptions: TRequestID;
 begin
-  Result := SendRequest('aria2.getGlobalOption', '');
+  Result := SendRequest('aria2.getGlobalOption', '', rvtStruct);
 end;
 
-function TAria2.ChangeGlobalOptions(const Options: array of TAria2Option):TRequestID;
+function TAria2.ChangeGlobalOptions(const Options: array of TAria2Option): TRequestID;
 begin
-  Result := SendRequest('aria2.changeGlobalOption', OptionsToJson(Options));
+  Result := SendRequest('aria2.changeGlobalOption', OptionsToJson(Options), rvtBool);
 end;
 
 function TAria2.GetGlobalStats: TRequestID;
 begin
-  Result := SendRequest('aria2.getGlobalStat', '');
+  Result := SendRequest('aria2.getGlobalStat', '', rvtStruct);
 end;
 
 function TAria2.PurgeDownloadResult: TRequestID;
 begin
-  Result := SendRequest('aria2.purgeDownloadResult', '');
+  Result := SendRequest('aria2.purgeDownloadResult', '', rvtBool);
 end;
 
 function TAria2.RemoveDownloadResult(GID: TAria2GID): TRequestID;
 begin
-  Result := SendRequest('aria2.removeDownloadResult', MakeStr(GID));
+  Result := SendRequest('aria2.removeDownloadResult', MakeStr(GID), rvtBool);
 end;
 
 function TAria2.GetVersion: TRequestID;
 begin
-  Result := SendRequest('aria2.getVersion', '');
+  Result := SendRequest('aria2.getVersion', '', rvtStruct);
 end;
 
 function TAria2.GetSessionInfo: TRequestID;
 begin
-  Result := SendRequest('aria2.getSessionInfo', '');
+  Result := SendRequest('aria2.getSessionInfo', '', rvtStruct);
 end;
 
 function TAria2.Shutdown(Force: Boolean): TRequestID;
 const
   Method: array[Boolean] of string = ('aria2.shutdown', 'aria2.forceShutdown');
 begin
-  Result := SendRequest(Method[Force], '');
+  Result := SendRequest(Method[Force], '', rvtBool);
 end;
 
 function TAria2.SaveSession: TRequestID;
 begin
-  Result := SendRequest('aria2.saveSession', '');
+  Result := SendRequest('aria2.saveSession', '', rvtBool);
 end;
 
 procedure TAria2.CheckResult(RequestID: TRequestID);
 begin
-  JsonFree(GetResult(RequestID));
+  JsonFree(GetResult(RequestID, rvtUnknown));
 end;
 
 function TAria2.GetBool(RequestID: TRequestID): Boolean;
 begin
-  Result := GetString(RequestID) = 'OK';
+  Result := GetString(RequestID, rvtBool) = 'OK';
 end;
 
 function TAria2.GetGID(RequestID: TRequestID): TAria2GID;
 begin
-  Result := GetString(RequestID);
+  Result := GetString(RequestID, rvtGID);
 end;
 
 function TAria2.GetInt(RequestID: TRequestID): Integer;
 var
   Res: PJsonValue;
 begin
-  Res := GetResult(RequestID);
+  Res := GetResult(RequestID, rvtInt);
   try
     Result := JsonInt(Res);
   finally
@@ -886,11 +1003,11 @@ begin
   end;
 end;
 
-function TAria2.GetString(RequestID: TRequestID): string;
+function TAria2.GetString(RequestID: TRequestID; ValueType: TAria2RequestValueType = rvtString): string;
 var
   Res: PJsonValue;
 begin
-  Res := GetResult(RequestID);
+  Res := GetResult(RequestID, ValueType);
   try
     Result := JsonStr(Res);
   finally
@@ -900,7 +1017,7 @@ end;
 
 function TAria2.GetStruct(RequestID: TRequestID): TAria2Struct;
 begin
-  Result := TAria2Struct.Create(GetResult(RequestID));
+  Result := TAria2Struct.Create(GetResult(RequestID, rvtStruct));
 end;
 
 procedure TAria2.BeginBatch;
@@ -991,24 +1108,35 @@ begin
   FResults[High(FResults)] := Reply;
 end;
 
-function TAria2.GetResult(RequestID: TRequestID): PJsonValue;
+function TAria2.GetResult(RequestID: TRequestID; ValueType: TAria2RequestValueType): PJsonValue;
 var
   i: Integer;
+  ID: TRequestID;
+  Time: Cardinal;
   Res: PJsonValue;
 begin
   Res := nil;
   Result := nil;
+  Time := GetTickCount;
   FBatchLock.Acquire;
   try
     FRequestLock.Acquire;
     try
       for i := 0 to High(FResults) do
-        if JsonInt(JsonItem(FResults[i], 'id')) = RequestID then
+      begin
+        ID := JsonInt(JsonItem(FResults[i], 'id'));
+        if ID = RequestID then
         begin
           Res := FResults[i];
           FResults[i] := nil;
           Break;
         end;
+        if (Time - ((ID shr TimeShift) and TimeMask)) and TimeMask > 60000 then
+        begin
+          JsonFree(FResults[i]);
+          FResults[i] := nil;
+        end;
+      end;
     finally
       FRequestLock.Release;
     end;
@@ -1022,6 +1150,11 @@ begin
       Result := JsonExtractItem(Res, 'result');
       if not Assigned(Result) then
         raise Exception.Create('Aria2: invalid reply');
+      if (ValueType <> rvtUnknown) and (TAria2RequestValueType((RequestID shr ValueTypeShift) and ValueTypeMask) <> ValueType) then
+      begin
+        JsonFree(Result);
+        raise Exception.Create('Aria2: request type mismatch');
+      end;
     finally
       JsonFree(Res);
     end;
@@ -1030,7 +1163,7 @@ begin
   end;
 end;
 
-function TAria2.SendRequest(const Method, Params: string): TRequestID;
+function TAria2.SendRequest(const Method, Params: string; ValueType: TAria2RequestValueType): TRequestID;
 const
   RequestTemplate = '{"jsonrpc":"2.0","id":%d,"method":"%s","params":[';
 var
@@ -1042,7 +1175,9 @@ begin
   FRequestLock.Acquire;
   try
     FCurID := Max(FCurId, 1) + 1;
-    Result := FCurID;
+    Result := ((GetTickCount and TimeMask) shl TimeShift) or
+              ((Byte(ValueType) and ValueTypeMask) shl ValueTypeShift) or
+              ((FCurID and CtrMask) shl CtrShift);
     Request := Format(RequestTemplate, [Result, Method]) + AddToken(Params) + ']}';
     if FBatchRequest = '' then
       AddResult(JsonParse(FOnRequest(Self, Request)))

@@ -1,12 +1,13 @@
 unit PageFiles;
 
-//TODO: hotkeys, file renaming, sorting
+//TODO: hotkeys, sorting
+//TODO: external saving of multiple index-out options?
 
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlListViewEx, avlEventBus, MainForm,
-  InfoPane, Aria2, UpdateThread;
+  Windows, Messages, CommCtrl, AvL, avlUtils, avlListViewEx, avlEventBus,
+  MainForm, InfoPane, Aria2, UpdateThread;
 
 type
   TChangeSelection = (csAdd, csRemove, csInvert);
@@ -25,6 +26,7 @@ type
     procedure SaveSettings(Sender: TObject; const Args: array of const);
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
     procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
+    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
   protected
     function GetName: string; override;
     procedure SetGID(Value: TAria2GID); override;
@@ -43,7 +45,7 @@ uses
   Utils;
 
 type
-  TMenuID = (IDMenuFiles = 20000, IDRefresh, IDSelectAll, IDFilesSep0, IDOpen, IDOpenFolder, IDFilesSep1, IDSelect, IDDeselect, IDInvertSelection);
+  TMenuID = (IDMenuFiles = 20000, IDRefresh, IDSelectAll, IDFilesSep0, IDOpen, IDOpenFolder, IDRename, IDFilesSep1, IDSelect, IDDeselect, IDInvertSelection);
 
 const
   DefFilesColumns: array[0..4] of TListColumn = (
@@ -52,12 +54,13 @@ const
     (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfLength),
     (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfLength),
     (Caption: 'Selected'; Width: 60; FType: ftString; Field: sfSelected));
-  MenuFiles: array[0..9] of PChar = ('20001',
+  MenuFiles: array[0..10] of PChar = ('20001',
     '&Refresh',
     'Select &all',
     '-',
     '&Open',
     'Open &folder',
+    'Re&name',
     '-',
     '&Select',
     '&Deselect',
@@ -74,7 +77,7 @@ begin
   FFilesIcons.LoadSystemIcons(true);
   FilesList := TListViewEx.Create(Self);
   FilesList.SetPosition(0, 0);
-  FilesList.Style := FilesList.Style and not LVS_SINGLESEL or LVS_SHOWSELALWAYS or LVS_SORTASCENDING {or LVS_EDITLABELS} or LVS_NOSORTHEADER; //TODO: switches for sorting & etc
+  FilesList.Style := FilesList.Style and not LVS_SINGLESEL or LVS_SHOWSELALWAYS or LVS_SORTASCENDING or LVS_EDITLABELS or LVS_NOSORTHEADER; //TODO: switches for sorting & etc
   FilesList.ViewStyle := LVS_REPORT;
   FilesList.OptionsEx := FilesList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   FilesList.SmallImages := FFilesIcons;
@@ -180,6 +183,7 @@ begin
           else
             Exception.Create('Directory "' + Dir + '" not found');
         end;
+        IDRename: FilesList.Perform(LVM_EDITLABEL, FilesList.SelectedIndex, 0);
         IDSelect: ChangeSelection(csAdd);
         IDDeselect: ChangeSelection(csRemove);
         IDInvertSelection: ChangeSelection(csInvert);
@@ -193,6 +197,22 @@ procedure TPageFiles.WMContextMenu(var Msg: TWMContextMenu);
 begin
   if Assigned(FilesList) and (Msg.hWnd = FilesList.Handle) then
     FilesMenu.Popup(Msg.XPos, Msg.YPos);
+end;
+
+procedure TPageFiles.WMNotify(var Msg: TWMNotify);
+var
+  Option: TAria2Option;
+begin
+  inherited;
+  if Assigned(FilesList) and (PNMHdr(Msg.NMHdr).hwndFrom = FilesList.Handle) then
+    if (Msg.NMHdr.code = LVN_ENDLABELEDIT) and Assigned(PLVDispInfo(Msg.NMHdr).item.pszText) then
+    begin //TOFO: support for multiple index-out options (passed as array) and support for out option
+      Option.Key := soIndexOut;
+      with PLVDispInfo(Msg.NMHdr).item do
+        Option.Value := IntToStr(lParam + 1) + '=' + pszText;
+      with (FParent.Parent as TMainForm).Aria2 do
+        Msg.Result := Integer(LongBool(GetBool(ChangeOptions(FGID, [Option]))));
+    end;
 end;
 
 function TPageFiles.GetName: string;
