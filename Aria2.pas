@@ -54,7 +54,7 @@ type
   private
     FOnRequest: TOnRPCRequest;
     FRPCSecret: string;
-    FCurID: Word;
+    FIDCtr: Word;
     FBatchRequest: string;
     FResults: array of PJsonValue;
     FBatchLock, FRequestLock: TCriticalSection;
@@ -63,7 +63,6 @@ type
   protected
     function GetResult(RequestID: TRequestID; ValueType: TAria2RequestValueType): PJsonValue;
     function SendRequest(const Method, Params: string; ValueType: TAria2RequestValueType): TRequestID;
-    procedure FreeResults;
   public
     constructor Create(OnRequest: TOnRPCRequest; const RPCSecret: string = '');
     destructor Destroy; override;
@@ -712,12 +711,12 @@ uses
   Utils;
 
 const
-  TimeMask = $FFFFF;
-  TimeShift = 11;
+  TimeMask = $FFFF;
+  TimeShift = 0;
   ValueTypeMask = $07;
-  ValueTypeShift = 8;
-  CtrMask = $FF;
-  CtrShift = 0;
+  ValueTypeShift = 16;
+  CtrMask = $FFF;
+  CtrShift = 19;
 
 function Escape(C: Char): string;
 const
@@ -793,6 +792,11 @@ begin
   Delete(Result, Length(Result), 1);
 end;
 
+function GetTime: Word;
+begin
+  Result := GetTickCount div 1000;
+end;
+
 { TAria2 }
 
 constructor TAria2.Create(OnRequest: TOnRPCRequest; const RPCSecret: string);
@@ -805,8 +809,19 @@ begin
 end;
 
 destructor TAria2.Destroy;
+var
+  i: Integer;
 begin
-  FreeResults;
+  FBatchLock.Acquire;
+  FRequestLock.Acquire;
+  try
+    for i := 0 to High(FResults) do
+      JsonFree(FResults[i]);
+    Finalize(FResults);
+  finally
+    FRequestLock.Release;
+    FBatchLock.Release;
+  end;
   FreeAndNil(FRequestLock);
   FreeAndNil(FBatchLock);
   inherited;
@@ -1057,22 +1072,6 @@ begin
   end;
 end;
 
-procedure TAria2.FreeResults;
-var
-  i: Integer;
-begin
-  FBatchLock.Acquire;
-  FRequestLock.Acquire;
-  try
-    for i := 0 to High(FResults) do
-      JsonFree(FResults[i]);
-    Finalize(FResults);
-  finally
-    FRequestLock.Release;
-    FBatchLock.Release;
-  end;
-end;
-
 function TAria2.AddToken(const Params: string): string;
 begin
   Result := '';
@@ -1112,12 +1111,12 @@ function TAria2.GetResult(RequestID: TRequestID; ValueType: TAria2RequestValueTy
 var
   i: Integer;
   ID: TRequestID;
-  Time: Cardinal;
+  Time: Word;
   Res: PJsonValue;
 begin
   Res := nil;
   Result := nil;
-  Time := GetTickCount;
+  Time := GetTime;
   FBatchLock.Acquire;
   try
     FRequestLock.Acquire;
@@ -1131,7 +1130,7 @@ begin
           FResults[i] := nil;
           Break;
         end;
-        if (Time - ((ID shr TimeShift) and TimeMask)) and TimeMask > 60000 then
+        if Time - ((ID shr TimeShift) and TimeMask) > 300 then
         begin
           JsonFree(FResults[i]);
           FResults[i] := nil;
@@ -1169,15 +1168,14 @@ const
 var
   Request: string;
 begin
-  Result := 0;
   if not Assigned(FOnRequest) then
     raise Exception.Create('Aria2: no transport provided');
   FRequestLock.Acquire;
   try
-    FCurID := Max(FCurId, 1) + 1;
-    Result := ((GetTickCount and TimeMask) shl TimeShift) or
+    Inc(FIDCtr);
+    Result := ((GetTime and TimeMask) shl TimeShift) or
               ((Byte(ValueType) and ValueTypeMask) shl ValueTypeShift) or
-              ((FCurID and CtrMask) shl CtrShift);
+              ((FIDCtr and CtrMask) shl CtrShift)or $80000000;
     Request := Format(RequestTemplate, [Result, Method]) + AddToken(Params) + ']}';
     if FBatchRequest = '' then
       AddResult(JsonParse(FOnRequest(Self, Request)))

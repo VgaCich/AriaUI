@@ -879,7 +879,6 @@ begin
   Section := SServer + IntToStr(ServersList.ItemIndex);
   Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
   FRequestTransport.Disconnect;
-  //FAria2.FreeResults;
   FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
   ClearTransfersList;
   ClearStatusBar;

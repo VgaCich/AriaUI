@@ -110,7 +110,7 @@ procedure TAddForm.OKClick(Sender: TObject);
 var
   i: Integer;
 begin
-  if MURLs.Visible then //Add URL list support
+  if MURLs.Visible then //Add URL list support (force-sequential)
   begin
     SetLength(URLs, 0);
     for i := 0 to MURLs.LineCount - 1 do
