@@ -22,6 +22,7 @@ type
     procedure Refresh;
     procedure Resize(Sender: TObject);
     procedure FilesDblClick(Sender: TObject);
+    procedure FilesKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure LoadSettings(Sender: TObject; const Args: array of const);
     procedure SaveSettings(Sender: TObject; const Args: array of const);
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
@@ -55,15 +56,15 @@ const
     (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfLength),
     (Caption: 'Selected'; Width: 60; FType: ftString; Field: sfSelected));
   MenuFiles: array[0..10] of PChar = ('20001',
-    '&Refresh',
-    'Select &all',
+    '&Refresh'#9'F5',
+    'Select &all'#9'Ctrl-A',
     '-',
-    '&Open',
-    'Open &folder',
-    'Re&name',
+    '&Open'#9'Enter',
+    'Open &folder'#9'Shift-Enter',
+    'Re&name'#9'F2',
     '-',
-    '&Select',
-    '&Deselect',
+    '&Select'#9'F7',
+    '&Deselect'#9'F8',
     '&Invert selection');
 
 { TPageFiles }
@@ -82,6 +83,7 @@ begin
   FilesList.OptionsEx := FilesList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   FilesList.SmallImages := FFilesIcons;
   FilesList.OnDblClick := FilesDblClick;
+  FilesList.OnKeyDown := FilesKeyDown;
   OnResize := Resize;
   EventBus.AddListener(EvLoadSettings, LoadSettings);
   EventBus.AddListener(EvSaveSettings, SaveSettings);
@@ -162,6 +164,26 @@ begin
   Perform(WM_COMMAND, MakeWParam(Ord(IDOpen), 0), 0);
 end;
 
+procedure TPageFiles.FilesKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Shift = [] then
+    case Key of
+      VK_F2: FilesList.Perform(LVM_EDITLABEL, FilesList.SelectedIndex, 0);
+      VK_F5: Refresh;
+      VK_F7: Perform(WM_COMMAND, MakeWParam(Ord(IDSelect), 0), 0);
+      VK_F8: Perform(WM_COMMAND, MakeWParam(Ord(IDDeselect), 0), 0);
+      VK_RETURN: Perform(WM_COMMAND, MakeWParam(Ord(IDOpen), 0), 0);
+    end;
+  if Shift = [ssShift] then
+    case Key of
+      VK_RETURN: Perform(WM_COMMAND, MakeWParam(Ord(IDOpenFolder), 0), 0);
+    end;
+  if Shift = [ssCtrl] then
+    case Key of
+      Ord('A'): FilesList.SelectAll;
+    end;
+end;
+
 procedure TPageFiles.WMCommand(var Msg: TWMCommand);
 var
   Dir: string;
@@ -206,7 +228,7 @@ begin
   inherited;
   if Assigned(FilesList) and (PNMHdr(Msg.NMHdr).hwndFrom = FilesList.Handle) then
     if (Msg.NMHdr.code = LVN_ENDLABELEDIT) and Assigned(PLVDispInfo(Msg.NMHdr).item.pszText) then
-    begin //TOFO: support for multiple index-out options (passed as array) and support for out option
+    begin //TODO: support for multiple index-out options (passed as array) and support for out option
       Option.Key := soIndexOut;
       with PLVDispInfo(Msg.NMHdr).item do
         Option.Value := IntToStr(lParam + 1) + '=' + pszText;
@@ -268,7 +290,7 @@ begin
         Info.Index := i;
         Item := FilesList.ItemAdd(GetValue(0));
         FilesList.ItemObject[Item] := TObject(StrToInt(Info[sfIndex]) - 1);
-        FilesList.ItemImageIndex[Item] := FileIconIndex(ExtractFileName(Info[sfPath]), false);
+        FilesList.ItemImageIndex[Item] := FileIconIndex(ExtractFileExt(Info[sfPath]), false);
         for j := 1 to High(FFilesColumns) do
           FilesList.Items[Item, j] := GetValue(j);
       end;

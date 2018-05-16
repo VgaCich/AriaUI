@@ -1,7 +1,9 @@
 unit MainForm;
 
 //TODO: Transfers sorting, filtering & searching
-//TODO: Uncaught exception on InfoPane tab switching (Files->Info)
+//TODO: Uncaught exception on InfoPane tab switching (Files->Info) (problems with file icons on large lists)
+//TODO: Heartbeat indicator
+//TODO: Extract TransfersList as control
 
 interface
 
@@ -127,6 +129,7 @@ const
   SServer = 'Server.';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
   STransferColumns = 'TransferListColumns';
+  SDebug = 'Debug';
   SCaption = 'Caption.';
   SWidth = 'Width.';
   SFlags = 'Flags.';
@@ -173,27 +176,27 @@ const
     'E&xit'#9'Alt-X');
   MenuTransfersCapt = '&Transfers';
   MenuTransfers: array[0..15] of PChar = ('2001',
-    '&Resume', //TODO: restarting of failed transfers
-    '&Pause',
-    'R&emove',
-    'Pr&operties...',
+    '&Resume'#9'Ctrl-R', //TODO: restarting of failed transfers
+    '&Pause'#9'Ctrl-P',
+    'R&emove'#9'Del',
+    'Pr&operties...'#9'Alt-Enter',
     'Check &integrity',
     '-',
-    'Move &up',
-    'Move &down',
+    'Move &up'#9'Ctrl-Up',
+    'Move &down'#9'Ctrl-Down',
     '-',
     'Res&ume all',
     'Pau&se all',
-    'Purge &completed',
+    'Purge &completed'#9'F4',
     '-',
-    '&Find...',
-    'Find &next');
+    '&Find...'#9'Ctrl-F',
+    'Find &next'#9'F3');
   MenuServerCapt = '&Server';
   MenuServer: array[0..5] of PChar = ('3001',
-    'Server &options...',
+    'Server &options...'#9'F11',
     'Server &version...',
     '&Save session',
-    'Shut&down server',
+    'Shut&down server'#9'F12',
     '&RPC Request...');
   MenuHelpCapt = '&Help';
   MenuHelp: array[0..4] of PChar = ('5001',
@@ -242,11 +245,25 @@ const
   SBParts: array[TSBPart] of Integer = (100, 250, 400, -1);
 
 var
-  Accels: array[0..4] of TAccel = ( //TODO: More accels
+  Accels: array[0..16] of TAccel = ( //TODO: More accels
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('U'); Cmd: Ord(IDAddURL)),
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('O'); Cmd: Ord(IDAddTorrent)),
     (fVirt: FCONTROL or FVIRTKEY; Key: Ord('M'); Cmd: Ord(IDAddMetalink)),
     (fVirt: FALT or FVIRTKEY; Key: Ord('X'); Cmd: Ord(IDExit)),
+    (fVirt: FCONTROL or FVIRTKEY; Key: Ord('R'); Cmd: Ord(IDResume)),
+    (fVirt: FCONTROL or FVIRTKEY; Key: Ord('P'); Cmd: Ord(IDPause)),
+    (fVirt: FCONTROL or FSHIFT or FVIRTKEY; Key: Ord('P'); Cmd: Ord(IDPause)),
+    //(fVirt: FVIRTKEY; Key: VK_DELETE; Cmd: Ord(IDRemove)), //TODO: no such keys in accelerators, move to TransfersList.OnKeyDown
+    //(fVirt: FSHIFT or FVIRTKEY; Key: VK_DELETE; Cmd: Ord(IDRemove)), 
+    (fVirt: FALT or FVIRTKEY; Key: VK_RETURN; Cmd: Ord(IDProperties)), //TODO: RALT too!
+    (fVirt: FCONTROL or FVIRTKEY; Key: VK_UP; Cmd: Ord(IDMoveUp)),
+    (fVirt: FCONTROL or FVIRTKEY; Key: VK_DOWN; Cmd: Ord(IDMoveDown)),
+    (fVirt: FCONTROL or FVIRTKEY; Key: Ord('F'); Cmd: Ord(IDFind)),
+    (fVirt: FVIRTKEY; Key: VK_F3; Cmd: Ord(IDFindNext)),
+    (fVirt: FVIRTKEY; Key: VK_F4; Cmd: Ord(IDPurge)),
+    (fVirt: FVIRTKEY; Key: VK_F11; Cmd: Ord(IDServerOptions)),
+    (fVirt: FVIRTKEY; Key: VK_F12; Cmd: Ord(IDShutdownServer)),
+    (fVirt: FSHIFT or FVIRTKEY; Key: VK_F12; Cmd: Ord(IDShutdownServer)),
     (fVirt: FVIRTKEY; Key: VK_F1; Cmd: Ord(IDAbout)));
 
 constructor TMainForm.Create;
@@ -326,7 +343,7 @@ begin
   TransfersList.OptionsEx := TransfersList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
   TransfersList.SmallImages := FTransferIcons;
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
-  TransfersList.OnDblClick := TransferDblClick;
+  TransfersList.OnDblClick := TransferDblClick; //TODO: OnKeyDown and move some hotkays (and add Ctrl-A)
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
@@ -563,7 +580,7 @@ procedure TMainForm.AddURL(Sender: TObject);
 begin
   try
     with FAria2 do
-      CheckResult(AddUri(FormAdd.URLs, FormAdd.Options));
+      CheckResult(AddUri(FormAdd.URLs, FormAdd.Options)); //TODO: Async CheckResult
   except
     on E: Exception do ShowException;
   end;
@@ -642,7 +659,7 @@ var
   Mask: TMask;
 begin
   if (From = -2) and not InputQuery(Handle, 'Find transfer', 'Search mask:', FSearchString) then Exit;
-  Mask := TMask.Create(FSearchString);
+  Mask := TMask.Create(FSearchString); //TODO: Add two asterisks if mask contains no wildcards
   try
     for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
       if Mask.Matches(TransfersList.Items[i, 0]) then
@@ -783,7 +800,7 @@ end;
 
 function TMainForm.PauseTransfer(GID: TAria2GID; Param: Integer): Boolean;
 begin
-  with FAria2 do
+  with FAria2 do //TODO: set options like pause/pause-metadata
     Result := GetGID(Pause(GID, LongBool(Param))) = GID;
 end;
 
@@ -847,7 +864,7 @@ var
 begin
   with FAria2 do
   begin
-    Status := GetStruct(TellStatus(GID, [sfStatus]));
+    Status := GetStruct(TellStatus(GID, [sfStatus])); //TODO: it's slow!
     if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
       Result := GetGID(Remove(GID, LongBool(Param))) = GID
     else

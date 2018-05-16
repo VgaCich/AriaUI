@@ -134,7 +134,7 @@ begin
   inherited;
   if PNMHdr(Msg.NMHdr).hwndFrom = Handle then
     if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
-      with PNMListView(Msg.NMHdr)^ do
+      with PNMListView(Msg.NMHdr)^ do //TODO: Set focus to edit
       begin
         OptInfo := '';
         for i := 0 to High(Aria2Options) do

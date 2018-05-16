@@ -108,6 +108,7 @@ procedure TPieceBar.Paint;
 var
   i, Cur, Bound, Total, Num, Denom: Integer;
 begin
+  Assert(FBitmap.Width > 0);
   FBitmap.Canvas.Brush.Color := clWhite;
   FBitmap.Canvas.FillRect(Rect(0, 0, FBitmap.Width, 1));
   Total := 0;
@@ -138,7 +139,7 @@ begin
   Canvas.Brush.Color := clWhite;
   Canvas.FillRect(Rect(0, 0, ClientWidth, 5));
   Canvas.Brush.Color := clBlue;
-  Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Length(FPieces))), 5));
+  Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Max(1, Length(FPieces)))), 5));
   Canvas.Pen.Color := clBtnShadow;
   Canvas.MoveTo(0, 5);
   Canvas.LineTo(ClientWidth, 5);
@@ -202,7 +203,7 @@ var
   i: Integer;
   Settings: TSettings;
 begin
-  Settings := (Sender as TMainForm).Settings; 
+  Settings := (Sender as TMainForm).Settings;
   for i := 0 to High(Labels) do
     FreeAndNil(Labels[i]);
   Finalize(FInfoFields);
@@ -252,7 +253,7 @@ begin
   Pieces.SetSize(ClientWidth - 10, 25);
   SetLength(Columns, FColCount + 1);
   for i := 0 to FColCount do
-    Columns[i] := 5 + Round((ClientWidth - 5) * i / FColCount);
+    Columns[i] := 5 + (ClientWidth - 5) * i div FColCount;
   Row := Pieces.Top + Pieces.Height + 10;
   Column := 0;
   for i := 0 to High(Labels) do
