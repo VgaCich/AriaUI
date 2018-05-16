@@ -659,7 +659,9 @@ var
   Mask: TMask;
 begin
   if (From = -2) and not InputQuery(Handle, 'Find transfer', 'Search mask:', FSearchString) then Exit;
-  Mask := TMask.Create(FSearchString); //TODO: Add two asterisks if mask contains no wildcards
+  if (Pos('*', FSearchString) = 0) and (Pos('?', FSearchString) = 0) then
+    FSearchString := '*' + FSearchString + '*';
+  Mask := TMask.Create(FSearchString);
   try
     for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
       if Mask.Matches(TransfersList.Items[i, 0]) then
@@ -775,6 +777,7 @@ procedure TMainForm.LoadSettings;
 var
   i: Integer;
 begin
+  FCurServerStorage := nil;
   for i := 0 to ServersList.ItemCount - 1 do
     ServersList.Objects[i].Free;
   ServersList.Clear;
