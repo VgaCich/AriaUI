@@ -251,6 +251,7 @@ var
 begin
   LPieces.SetSize(ClientWidth - 10, 15);
   Pieces.SetSize(ClientWidth - 10, 25);
+  if FColCount = 0 then Exit;
   SetLength(Columns, FColCount + 1);
   for i := 0 to FColCount do
     Columns[i] := 5 + (ClientWidth - 5) * i div FColCount;

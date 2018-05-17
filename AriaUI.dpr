@@ -11,6 +11,7 @@ var
   PrevWnd: THandle;
 
 begin
+  //Set8087CW($133F); //Disable FPU exceptions
   if IsRunning(AppName) then //TODO: Pass options like files for open
   begin
     PrevWnd := FindWindow('TMainForm', AppCaption);

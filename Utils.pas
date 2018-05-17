@@ -49,11 +49,10 @@ function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType
 
   function GetPercent(N, Q: Int64): string;
   begin
-    Result := FloatToStr2(100 * N / Q, 1, 2);
-    if Result = 'Nan' then
+    if Q = 0 then
       Result := '-'
     else
-      Result := Result + '%';
+      Result := FloatToStr2(100 * N / Q, 1, 2) + '%';
   end;
 
 const

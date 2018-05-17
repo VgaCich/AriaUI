@@ -826,39 +826,42 @@ end;
 
 procedure TMainForm.Refresh;
 begin
-  if Assigned(FUpdateThread.Stats) then
-  begin
-    with FUpdateThread do
-      TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
-        [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
-    if Visible then
-    try //TODO: Request details only for visible items
-      StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
-      BeginTransfersUpdate;
+  try
+    if Assigned(FUpdateThread.Stats) then
+    begin
       with FUpdateThread do
-      begin
-        if Assigned(Active) then
-          UpdateTransfers(Active);
-        if Assigned(Waiting) then
-          UpdateTransfers(Waiting);
-        if Assigned(Stopped) then
-          UpdateTransfers(Stopped);
-        StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
-        StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
-        StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
+        TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
+          [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
+      if Visible then
+      try //TODO: Request details only for visible items
+        StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
+        BeginTransfersUpdate;
+        with FUpdateThread do
+        begin
+          if Assigned(Active) then
+            UpdateTransfers(Active);
+          if Assigned(Waiting) then
+            UpdateTransfers(Waiting);
+          if Assigned(Stopped) then
+            UpdateTransfers(Stopped);
+          StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
+          StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
+          StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
+        end;
+        Info.Update(FUpdateThread);
+      finally
+        EndTransfersUpdate;
       end;
-      Info.Update(FUpdateThread);
-    finally
-      EndTransfersUpdate;
+    end
+    else
+    begin
+      ClearStatusBar;
+      StatusBar.SetPartText(Ord(sbConnection), 0, 'No connection');
+      TrayIcon.ToolTip := Caption + CRLF + 'No connection';
     end;
-  end
-  else
-  begin
-    ClearStatusBar;
-    StatusBar.SetPartText(Ord(sbConnection), 0, 'No connection');
-    TrayIcon.ToolTip := Caption + CRLF + 'No connection';
+    EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
+  except
   end;
-  EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
 end;
 
 function TMainForm.RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
