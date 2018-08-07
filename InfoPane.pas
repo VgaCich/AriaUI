@@ -95,7 +95,7 @@ end;
 
 procedure TInfoPane.LoadSettings(Sender: TObject; const Args: array of const);
 begin
-  Tabs.TabIndex := (Sender as TMainForm).Settings.ReadInteger(Sender.ClassName, SInfoPage, 0);
+  Tabs.TabIndex := Settings.ReadInteger(Sender.ClassName, SInfoPage, 0);
   SetPage(Tabs.TabIndex);
 end;
 
@@ -116,7 +116,7 @@ end;
 
 procedure TInfoPane.SaveSettings(Sender: TObject; const Args: array of const);
 begin
-  (Sender as TMainForm).Settings.WriteInteger(Sender.ClassName, SInfoPage, Tabs.TabIndex);
+  Settings.WriteInteger(Sender.ClassName, SInfoPage, Tabs.TabIndex);
 end;
 
 procedure TInfoPane.SetGID(const Value: TAria2GID);

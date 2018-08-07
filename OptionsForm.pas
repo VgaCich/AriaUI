@@ -1,15 +1,16 @@
 unit OptionsForm;
 
+//TODO: Path substitution lists for net shares (opning files from PageFiles, show available space on adding
+
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlSettings, Aria2, OptionsList;
+  Windows, Messages, AvL, avlUtils, Aria2, Utils, OptionsList;
 
 type
   TOptionsPage = class(TSimplePanel)
   protected
     function GetName: string; virtual; abstract;
-    function Settings: TSettings;
   public
     constructor Create(Parent: TWinControl); virtual;
     procedure Load; virtual; abstract;
@@ -175,11 +176,6 @@ begin
   inherited Create(Parent, '');
   Border := 2;
   ExStyle := 0;
-end;
-
-function TOptionsPage.Settings: TSettings;
-begin
-  Result := FormMain.Settings;
 end;
 
 { TPageGeneral }

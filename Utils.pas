@@ -3,26 +3,47 @@ unit Utils;
 interface
 
 uses
-  Windows, AvL, avlUtils, Aria2;
+  Windows, AvL, avlUtils, avlListViewEx, avlSettings, Aria2;
 
 type
   TStringArray = array of string;
   TFieldType = (ftNone, ftString, ftName, ftStatus, ftSize, ftSpeed, ftPercent, ftETA, ftPath, ftLongStatus);
+  TListColumn = record
+    Caption: string;
+    Width: Integer;
+    FType: TFieldType;
+    Field: string;
+  end;
+  TListColumns = array of TListColumn;
+  TListColumnCallback = procedure(const Column: TListColumn) of object;
 
 procedure SetArray(var Dest: TStringArray; const Src: array of string);
 function First(const Pair: string; const Sep: Char = ':'): string;
 function Second(const Pair: string; const Sep: Char = ':'): string;
 function GetFieldValue(List: TAria2Struct; Names: TStringList; FType: TFieldType; const Field: string): string;
 procedure AddStatusKey(var Keys: TStringArray; Field: string);
+procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
+procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
 procedure ShowException;
 function StrToEnum(const S: string; const Values: array of string): Integer;
 function MakeDword(Lo, Hi: Word): Cardinal;
 function Select(Exp: Boolean; const STrue, SFalse: string): string;
 function Check(Exp: Boolean; const STrue: string): string;
 function DecodeURL(const URL: string): string;
+function LoadImageList(const Name: PChar): TImageList;
 
 const
+  AppName = 'AriaUI';
+  SCount = 'Count';
+  SFieldCaption = 'Caption.';
+  SFieldWidth = 'Width.';
+  SFieldType = 'Type.';
+  SFieldField = 'Field.';
+  SFieldFlags = 'Flags.';
   BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
+
+var
+  Settings: TSettings;
 
 implementation
 
@@ -69,6 +90,7 @@ begin
                Result := Names.Values[List[sfGID]];
     ftStatus, ftLongStatus: begin
                  Result := List[sfStatus];
+                 if Length(Result) > 0 then Result[1] := UpCase(Result[1]);
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
                    Result := Result + StatusSeeding[FType = ftLongStatus];
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then
@@ -99,6 +121,65 @@ begin
       if Keys[i] = Key then Continue;
     SetLength(Keys, Length(Keys) + 1);
     Keys[High(Keys)] := Key;
+  end;
+end;
+
+procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
+var
+  i: Integer;
+begin
+  if Settings.ReadInteger(Section, SCount, 0) <> 0 then
+  begin
+    SetLength(Columns, Settings.ReadInteger(Section, SCount, 0));
+    for i := 0 to High(Columns) do
+      with Columns[i] do
+      begin
+        Caption := Settings.ReadString(Section, SFieldCaption + IntToStr(i), '');
+        Width := Settings.ReadInteger(Section, SFieldWidth + IntToStr(i), 0);
+        FType := TFieldType(Settings.ReadInteger(Section, SFieldType + IntToStr(i), 0));
+        Field := Settings.ReadString(Section, SFieldField + IntToStr(i), '');
+      end;
+  end
+  else begin
+    SetLength(Columns, Length(DefColumns));
+    for i := 0 to High(DefColumns) do
+      Columns[i] := DefColumns[i];
+  end;
+  for i := 0 to High(Columns) do
+    with Columns[i] do
+    begin
+      List.ColumnAdd(Caption, Width);
+      if Assigned(Callback) then
+        Callback(Columns[i]);
+    end;
+end;
+
+procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
+var
+  i: Integer;
+  Changed: Boolean;
+begin
+  for i := 0 to High(Columns) do
+    Columns[i].Width := List.ColumnWidth[i];
+  Changed := Length(Columns) <> Length(DefColumns);
+  if not Changed then
+    for i := 0 to High(Columns) do
+      if (Columns[i].Caption <> DefColumns[i].Caption) or
+         (Columns[i].Width <> DefColumns[i].Width) or
+         (Columns[i].FType <> DefColumns[i].FType) or
+         (Columns[i].Field <> DefColumns[i].Field) then
+        Changed := true;
+  if Changed then
+  begin
+    Settings.WriteInteger(Section, SCount, Length(Columns));
+    for i := 0 to High(Columns) do
+      with Columns[i] do
+      begin
+        Settings.WriteString(Section, SFieldCaption + IntToStr(i), Caption);
+        Settings.WriteInteger(Section, SFieldWidth + IntToStr(i), Width);
+        Settings.WriteInteger(Section, SFieldType + IntToStr(i), Ord(FType));
+        Settings.WriteString(Section, SFieldField + IntToStr(i), Field);
+      end;
   end;
 end;
 
@@ -154,5 +235,20 @@ begin
     Inc(i);
   end;
 end;
+
+function LoadImageList(const Name: PChar): TImageList;
+begin
+  Result := TImageList.Create;
+  Result.AddMasked(LoadImage(hInstance, Name, IMAGE_BITMAP, 0, 0, 0), clFuchsia);
+end;
+
+initialization
+
+  Settings := TSettings.Create(AppName);
+  Settings.Source := ssIni;
+
+finalization
+
+  FreeAndNil(Settings);
 
 end.

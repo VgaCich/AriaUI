@@ -3,8 +3,8 @@ unit PageInfo;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, Utils, InfoPane,
-  Aria2, UpdateThread, MainForm;
+  Windows, Messages, AvL, avlUtils, avlEventBus, Utils, InfoPane, Aria2,
+  UpdateThread;
 
 type
   TPieces = array of Boolean;
@@ -53,6 +53,9 @@ type
   end;
 
 implementation
+
+uses
+  MainForm;
 
 const
   SInfoFields = 'InfoFields';
@@ -201,9 +204,7 @@ end;
 procedure TPageInfo.LoadSettings(Sender: TObject; const Args: array of const);
 var
   i: Integer;
-  Settings: TSettings;
 begin
-  Settings := (Sender as TMainForm).Settings;
   for i := 0 to High(Labels) do
     FreeAndNil(Labels[i]);
   Finalize(FInfoFields);
@@ -214,10 +215,10 @@ begin
     for i := 0 to High(FInfoFields) do
       with FInfoFields[i] do
       begin
-        Caption := Settings.ReadString(SInfoFields, SCaption + IntToStr(i), '');
-        Flags := TLabelFlags(Byte(Settings.ReadInteger(SInfoFields, SFlags + IntToStr(i), 0)));
-        FType := TFieldType(Settings.ReadInteger(SInfoFields, SType + IntToStr(i), 0));
-        Field := Settings.ReadString(SInfoFields, SField + IntToStr(i), '');
+        Caption := Settings.ReadString(SInfoFields, SFieldCaption + IntToStr(i), '');
+        Flags := TLabelFlags(Byte(Settings.ReadInteger(SInfoFields, SFieldFlags + IntToStr(i), 0)));
+        FType := TFieldType(Settings.ReadInteger(SInfoFields, SFieldType + IntToStr(i), 0));
+        Field := Settings.ReadString(SInfoFields, SFieldField + IntToStr(i), '');
       end;
   end
   else begin

@@ -1,7 +1,7 @@
 program AriaUI;
 
 uses
-  LeakDetect, Windows, AvL, avlOneInstance, MainForm, OptionsForm, AddForm,
+  LeakDetect, Windows, AvL, avlOneInstance, Utils, MainForm, OptionsForm, AddForm,
   ServerOptionsForm, RPCRequestForm;
 
 {$R *.res}
@@ -11,7 +11,7 @@ var
   PrevWnd: THandle;
 
 begin
-  //Set8087CW($133F); //Disable FPU exceptions
+  Set8087CW($133F); //Disable FPU exceptions
   if IsRunning(AppName) then //TODO: Pass options like files for open
   begin
     PrevWnd := FindWindow('TMainForm', AppCaption);
@@ -23,7 +23,7 @@ begin
   Randomize;
   IsMultiThread := true;
   FormMain := TMainForm.Create;
-  LeakMessageEnabled := FormMain.Settings.ReadBool(SDebug, 'ReportLeaks', false);
+  LeakMessageEnabled := Settings.ReadBool(SDebug, 'ReportLeaks', false);
   FormOptions := TOptionsForm.Create(FormMain); //TODO: Dialogs must close on Escape
   FormAdd := TAddForm.Create(FormMain);
   FormServerOptions := TServerOptionsForm.Create(FormMain);

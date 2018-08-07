@@ -3,25 +3,17 @@ unit MainForm;
 //TODO: Transfers sorting, filtering & searching
 //TODO: Uncaught exception on InfoPane tab switching (Files->Info) (problems with file icons on large lists)
 //TODO: Heartbeat indicator
-//TODO: Extract TransfersList as control
+//TODO: scroll TransfersList to end
 
 interface
 
 uses
-  Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSettings, avlSplitter,
-  avlListViewEx, avlTrayIcon, avlJSON, avlEventBus, avlMasks, Utils, Aria2,
-  RequestTransport, UpdateThread, InfoPane;
+  Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSplitter,
+  avlTrayIcon, avlJSON, avlEventBus, Utils, Aria2, RequestTransport,
+  UpdateThread, TransfersList, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
-  TListColumn = record
-    Caption: string;
-    Width: Integer;
-    FType: TFieldType;
-    Field: string;
-  end;
-  TListColumns = array of TListColumn;
-  TListColumnCallback = procedure(const Column: TListColumn) of object;
   TPerServerStorage = class
   private
     FSection: string;
@@ -37,44 +29,29 @@ type
     property Temporary[const Name: string]: TObject read GetTemporary write PutTemporary; default;
   end;
   TMainForm = class(TForm)
-    Settings: TSettings;
     MainMenu, TrayMenu, TransfersMenu: TMenu;
     ToolBar: TToolBar;
     StatusBar: TStatusBar;
     Splitter: TSplitter;
     TrayIcon: TAvLTrayIcon; //TODO: check icon re-creation on explorer restart
     ServersList: TComboBoxEx;
-    TransfersList: TListViewEx;
+    TransfersList: TTransfersList;
     Info: TInfoPane;
   private
     FMinWidth, FMinHeight: Integer;
     FEvLoadSettings, FEvSaveSettings, FEvServerChanged, FEvUpdate: Integer;
     FAccelTable: HAccel;
-    FTBImages, FTransferIcons: TImageList;
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
     FCurServerStorage: TPerServerStorage;
     FUpdateThread: TUpdateThread;
-    FUpdateTransferKeys: Boolean;
-    FTransferKeys: TStringArray;
-    FTransferColumns: TListColumns;
-    FTransfersUpdate: record
-      Item: Integer;
-      Selected: TAria2GID;
-    end;
-    FSearchString: string;
     procedure AddMetalink(Sender: TObject);
     procedure AddTorrent(Sender: TObject);
-    procedure AddTransferKey(const Column: TListColumn);
     procedure AddURL(Sender: TObject);
-    procedure BeginTransfersUpdate;
     function CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
     procedure ClearStatusBar;
-    procedure ClearTransfersList;
     function Confirm(ID: Integer; const Message: string): Boolean;
-    procedure EndTransfersUpdate;
     procedure ExitProgram;
-    procedure FindTransfer(From: Integer = -2);
     function FormClose(Sender: TObject): Boolean;
     procedure FormDestroy(Sender: TObject);
     function FormMinimize(Sender: TObject): Boolean;
@@ -82,13 +59,11 @@ type
     procedure TrayIconMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     function QueryEndSession(var Msg: TMessages): Boolean;
     function FormProcessMsg(var Msg: TMsg): Boolean;
-    function GetGID(Index: Integer): TAria2GID;
     function MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     function PauseTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ProcessSelected(ID: Integer; Handler: TTransferHandler; const Messages: array of string; Param: Integer = 0);
     procedure Refresh;
     function RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
-    procedure UpdateTransfers(List: TAria2Struct);
     procedure RepaintAll;
     function ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure ServerChange(Sender: TObject);
@@ -108,8 +83,6 @@ type
     destructor Destroy; override;
     procedure LoadSettings;
     procedure SaveSettings;
-    procedure LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
-    procedure SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
     property Aria2: TAria2 read FAria2;
     property CurServerStorage: TPerServerStorage read FCurServerStorage;
   end;
@@ -124,18 +97,10 @@ const
   EvServerChanged = 'MainForm.ServerChanged'; //[PrevServerStorage, CurServerStorage]
   EvUpdate = 'MainForm.Update'; //[UpdateThread]
   AppCaption = 'Aria UI';
-  AppName = 'AriaUI';
   SServers = 'Servers';
   SServer = 'Server.';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
-  STransferColumns = 'TransferListColumns';
   SDebug = 'Debug';
-  SCaption = 'Caption.';
-  SWidth = 'Width.';
-  SFlags = 'Flags.';
-  SType = 'Type.';
-  SField = 'Field.';
-  SCount = 'Count';
   SCurrent = 'Current';
   SHost = 'Host';
   SPort = 'Port';
@@ -230,18 +195,6 @@ const
     (Caption: 'Options...'; ImageIndex: 8),
     (Caption: 'Exit'; ImageIndex: 9));
   TBMenuIDs: array[TTBButtons] of TMenuID = (IDAddURL, IDAddTorrent, IDAddMetalink, IDResume, IDPause, IDRemove, IDMoveUp, IDMoveDown, IDOptions, IDExit);
-  DefTransferColumns: array[0..10] of TListColumn = (
-    (Caption: 'Name'; Width: 200; FType: ftName; Field: ''),
-    (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfTotalLength),
-    (Caption: 'Progress'; Width: 60; FType: ftPercent; Field: sfCompletedLength + ':' + sfTotalLength),
-    (Caption: 'ETA'; Width: 60; FType: ftETA; Field: sfDownloadSpeed + ':' + sfTotalLength + ':' + sfCompletedLength),
-    (Caption: 'Status'; Width: 100; FType: ftStatus; Field: ''),
-    (Caption: 'Uploaded'; Width: 80; FType: ftSize; Field: sfUploadLength),
-    (Caption: 'DL speed'; Width: 80; FType: ftSpeed; Field: sfDownloadSpeed),
-    (Caption: 'UL speed'; Width: 80; FType: ftSpeed; Field: sfUploadSpeed),
-    (Caption: 'Ratio'; Width: 50; FType: ftPercent; Field: sfUploadLength + ':' + sfCompletedLength),
-    (Caption: 'Conns.'; Width: 50; FType: ftString; Field: sfConnections),
-    (Caption: 'Seeds'; Width: 50; FType: ftString; Field: sfNumSeeders));
   SBParts: array[TSBPart] of Integer = (100, 250, 400, -1);
 
 var
@@ -280,8 +233,7 @@ var
   i: Integer;
 begin
   inherited Create(nil, AppCaption);
-  Settings := TSettings.Create(AppName); //TODO: Detect first run and run first start wizard
-  Settings.Source := ssIni;
+  //TODO: Detect first run and run first start wizard
   FEvLoadSettings := EventBus.RegisterEvent(EvLoadSettings);
   FEvSaveSettings := EventBus.RegisterEvent(EvSaveSettings);
   FEvServerChanged := EventBus.RegisterEvent(EvServerChanged);
@@ -315,10 +267,6 @@ begin
   TrayIcon.OnMouseDown := TrayIconMouseDown;
   TrayIcon.Active := true;
   FAccelTable := CreateAcceleratorTable(Accels[0], Length(Accels));
-  FTBImages := TImageList.Create;
-  FTBImages.AddMasked(LoadImage(hInstance, 'TBMAIN', IMAGE_BITMAP, 0, 0, 0), clFuchsia);
-  FTransferIcons := TImageList.Create;
-  FTransferIcons.AddMasked(LoadImage(hInstance, 'TLICONS', IMAGE_BITMAP, 0, 0, 0), clFuchsia);
   ServersList := TComboBoxEx.Create(Self, csDropDownList);
   ServersList.Hint := 'Select server';
   ServersList.OnChange := ServerChange;
@@ -328,7 +276,7 @@ begin
   ToolBar.Perform(TB_SETMAXTEXTROWS, 0, 0);
   ToolBar.Perform(TB_AUTOSIZE, 0, 0);
   Toolbar.Indent := 120;
-  ToolBar.Images := FTBImages;
+  ToolBar.Images := LoadImageList('TBMAIN');
   for i := Low(TBButtons) to High(TBButtons) do
     ToolBar.ButtonAdd(TBButtons[i].Caption, TBButtons[i].ImageIndex);
   ServersList.SetBounds(ToolBar.Left + 2, ToolBar.Top + (ToolBar.Height - ServersList.Height) div 2, ToolBar.Indent - 4, ServersList.Height);
@@ -337,11 +285,7 @@ begin
   Splitter := TSplitter.Create(Self, false);
   Splitter.SetBounds(0, Settings.ReadInteger(ClassName, SSplitter, 300), ClientWidth, Splitter.Height);
   Splitter.OnMove := SplitterMove;
-  TransfersList := TListViewEx.Create(Self);
-  TransfersList.Style := TransfersList.Style and not LVS_SINGLESEL or LVS_SHOWSELALWAYS {or LVS_EDITLABELS} or LVS_NOSORTHEADER; //TODO: switches for sorting & etc
-  TransfersList.ViewStyle := LVS_REPORT;
-  TransfersList.OptionsEx := TransfersList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
-  TransfersList.SmallImages := FTransferIcons;
+  TransfersList := TTransfersList.Create(Self);
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
   TransfersList.OnDblClick := TransferDblClick; //TODO: OnKeyDown and move some hotkays (and add Ctrl-A)
   Info := TInfoPane.Create(Self);
@@ -363,10 +307,7 @@ begin
   FreeAndNil(MainMenu);
   FreeAndNil(TrayMenu);
   FreeAndNil(TransfersMenu);
-  Finalize(FTransferColumns);
-  FreeAndNil(FTransferIcons);
-  FreeAndNil(FTBImages);
-  FreeAndNil(Settings);
+  ToolBar.Images.Free;
   inherited;
 end;
 
@@ -458,6 +399,8 @@ begin
 end;
 
 procedure TMainForm.WMCommand(var Msg: TWMCommand);
+var
+  S: string;
 begin
   if (Msg.Ctl = 0) and (Msg.NotifyCode in [0, 1]) then
     try
@@ -471,7 +414,7 @@ begin
         IDResume: ProcessSelected(Ord(IDResume), ResumeTransfer, []);
         IDPause: ProcessSelected(Ord(IDPause), PauseTransfer, [], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
         IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
-        IDProperties: TransferProperties(GetGID(TransfersList.SelectedIndex), 0);
+        IDProperties: TransferProperties(TransfersList.GID[TransfersList.SelectedIndex], 0);
         IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
@@ -479,8 +422,8 @@ begin
         IDPauseAll, IDTrayPauseAll: with FAria2 do CheckResult(PauseAll(GetKeyState(VK_SHIFT) < 0));
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then with FAria2 do CheckResult(PurgeDownloadResult);
         IDTrayPurge: with FAria2 do CheckResult(PurgeDownloadResult);
-        IDFind: FindTransfer;
-        IDFindNext: FindTransfer(TransfersList.SelectedIndex);
+        IDFind: if InputQuery(Handle, 'Find transfer', 'Search mask:', S) then TransfersList.Find(S);
+        IDFindNext: TransfersList.Find('');
         IDServerOptions: FormServerOptions.Show;
         IDServerVersion: ShowServerVersion;
         IDSaveSession: with FAria2 do if GetBool(SaveSession) then ShowMessage('Session saved');
@@ -571,11 +514,6 @@ begin
   end;
 end;
 
-procedure TMainForm.AddTransferKey(const Column: TListColumn);
-begin
-  AddStatusKey(FTransferKeys, Column.Field);
-end;
-
 procedure TMainForm.AddURL(Sender: TObject);
 begin
   try
@@ -584,13 +522,6 @@ begin
   except
     on E: Exception do ShowException;
   end;
-end;
-
-procedure TMainForm.BeginTransfersUpdate;
-begin
-  TransfersList.BeginUpdate;
-  FTransfersUpdate.Item := 0;
-  FTransfersUpdate.Selected := GetGID(TransfersList.SelectedIndex);
 end;
 
 function TMainForm.CheckIntegrity(GID: TAria2GID; Param: Integer): Boolean;
@@ -609,73 +540,15 @@ begin
     StatusBar.SetPartText(i, 0, '');
 end;
 
-procedure TMainForm.ClearTransfersList;
-var
-  i: Integer;
-begin
-  for i := 0 to TransfersList.ItemCount - 1 do
-    FreeMem(PChar(TransfersList.ItemObject[i]));
-  TransfersList.Clear;
-end;
-
 function TMainForm.Confirm(ID: Integer; const Message: string): Boolean;
 begin
   Result := Settings.ReadBool(SDisabledDialogs, IntToStr(ID), false) or (MessageDlg(Message, Caption, MB_ICONQUESTION or MB_YESNO) = ID_YES);
-end;
-
-procedure TMainForm.EndTransfersUpdate;
-var
-  i: Integer;
-begin
-  while TransfersList.ItemCount > FTransfersUpdate.Item do
-  begin
-    FreeMem(PChar(TransfersList.ItemObject[TransfersList.ItemCount - 1]));
-    TransfersList.ItemDelete(TransfersList.ItemCount - 1);
-  end;
-  if (FTransfersUpdate.Selected <> '') and (TransfersList.SelCount <= 1) and (GetGID(TransfersList.SelectedIndex) <> FTransfersUpdate.Selected) then
-  begin
-    TransfersList.ClearSelection;
-    for i := 0 to TransfersList.ItemCount - 1 do
-      if GetGID(i) = FTransfersUpdate.Selected then
-      begin
-        TransfersList.SelectedIndex := i;
-        Break;
-      end;
-    if TransfersList.SelCount = 0 then
-      TransfersList.SelectedIndex := 0;
-  end;
-  TransfersList.EndUpdate;
 end;
 
 procedure TMainForm.ExitProgram;
 begin
   if Visible then Hide;
   Close;
-end;
-
-procedure TMainForm.FindTransfer(From: Integer);
-var
-  i: Integer;
-  Mask: TMask;
-begin
-  if (From = -2) and not InputQuery(Handle, 'Find transfer', 'Search mask:', FSearchString) then Exit;
-  if (Pos('*', FSearchString) = 0) and (Pos('?', FSearchString) = 0) then
-    FSearchString := '*' + FSearchString + '*';
-  Mask := TMask.Create(FSearchString);
-  try
-    for i := Max(0, From + 1) to TransfersList.ItemCount - 1 do
-      if Mask.Matches(TransfersList.Items[i, 0]) then
-      begin
-        TransfersList.ClearSelection;
-        TransfersList.SelectedIndex := i;
-        TransfersList.Perform(LVM_ENSUREVISIBLE, i, 0);
-        TransfersList.SetFocus;
-        Exit;
-      end;
-    MessageDlg('Not found', Caption, MB_ICONINFORMATION);
-  finally
-    Mask.Free;
-  end;
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;
@@ -687,71 +560,10 @@ begin
     SaveSettings;
 end;
 
-//TODO: Move Load/SaveListColumns to Options
-procedure TMainForm.LoadListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn; Callback: TListColumnCallback);
-var
-  i: Integer;
-begin
-  if Settings.ReadInteger(Section, SCount, 0) <> 0 then
-  begin
-    SetLength(Columns, Settings.ReadInteger(Section, SCount, 0));
-    for i := 0 to High(Columns) do
-      with Columns[i] do
-      begin
-        Caption := Settings.ReadString(Section, SCaption + IntToStr(i), '');
-        Width := Settings.ReadInteger(Section, SWidth + IntToStr(i), 0);
-        FType := TFieldType(Settings.ReadInteger(Section, SType + IntToStr(i), 0));
-        Field := Settings.ReadString(Section, SField + IntToStr(i), '');
-      end;
-  end
-  else begin
-    SetLength(Columns, Length(DefColumns));
-    for i := 0 to High(DefColumns) do
-      Columns[i] := DefColumns[i];
-  end;
-  for i := 0 to High(Columns) do
-    with Columns[i] do
-    begin
-      List.ColumnAdd(Caption, Width);
-      if Assigned(Callback) then
-        Callback(Columns[i]);
-    end;
-end;
-
-procedure TMainForm.SaveListColumns(List: TListViewEx; const Section: string; var Columns: TListColumns; const DefColumns: array of TListColumn);
-var
-  i: Integer;
-  Changed: Boolean;
-begin
-  for i := 0 to High(Columns) do
-    Columns[i].Width := List.ColumnWidth[i];
-  Changed := Length(Columns) <> Length(DefColumns);
-  if not Changed then
-    for i := 0 to High(Columns) do
-      if (Columns[i].Caption <> DefColumns[i].Caption) or
-         (Columns[i].Width <> DefColumns[i].Width) or
-         (Columns[i].FType <> DefColumns[i].FType) or
-         (Columns[i].Field <> DefColumns[i].Field) then
-        Changed := true;
-  if Changed then
-  begin
-    Settings.WriteInteger(Section, SCount, Length(Columns));
-    for i := 0 to High(Columns) do
-      with Columns[i] do
-      begin
-        Settings.WriteString(Section, SCaption + IntToStr(i), Caption);
-        Settings.WriteInteger(Section, SWidth + IntToStr(i), Width);
-        Settings.WriteInteger(Section, SType + IntToStr(i), Ord(FType));
-        Settings.WriteString(Section, SField + IntToStr(i), Field);
-      end;
-  end;
-end;
-
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   FUpdateThread.Terminate;
   FUpdateThread.WaitFor;
-  ClearTransfersList;
 end;
 
 function TMainForm.FormMinimize(Sender: TObject): Boolean;
@@ -763,14 +575,6 @@ end;
 function TMainForm.FormProcessMsg(var Msg: TMsg): Boolean;
 begin
   Result := TranslateAccelerator(Handle, FAccelTable, Msg) <> 0;
-end;
-
-function TMainForm.GetGID(Index: Integer): TAria2GID;
-begin
-  if (Index < 0) or (Index >= TransfersList.ItemCount) then
-    Result := ''
-  else
-    Result := PChar(TransfersList.ItemObject[Index]);
 end;
 
 procedure TMainForm.LoadSettings;
@@ -786,9 +590,6 @@ begin
   if ServersList.ItemCount = 0 then
     ServersList.Objects[ServersList.ItemAdd('###')] := TPerServerStorage.Create(0);
   ServersList.ItemIndex := Settings.ReadInteger(SServers, SCurrent, 0);
-  SetArray(FTransferKeys, BasicTransferKeys);
-  LoadListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns, AddTransferKey);
-  FUpdateTransferKeys := true;
   EventBus.SendEvent(FEvLoadSettings, Self, []);
   RepaintAll;
   ServerChange(ServersList);
@@ -811,16 +612,16 @@ procedure TMainForm.ProcessSelected(ID: Integer; Handler: TTransferHandler; cons
 var
   i: Integer;
 begin
-  if TransfersList.SelCount = 0 then Exit
+  if TransfersList.SelCount = 0 then Exit //TODO: collect gids before, clear selection after (anly when deleting, maybe?)
   else if TransfersList.SelCount = 1 then
   begin
     if (Length(Messages) > 0) and not Confirm(ID, Format(Messages[0], [TransfersList.SelectedCaption])) then Exit;
-    Handler(GetGID(TransfersList.SelectedIndex), Param);
+    Handler(TransfersList.GID[TransfersList.SelectedIndex], Param);
   end
   else begin
     if (Length(Messages) > 1) and not Confirm(ID, Format(Messages[1], [TransfersList.SelCount])) then Exit;
     for i := 0 to TransfersList.SelCount - 1 do
-      Handler(GetGID(TransfersList.Selected[i]), Param);
+      Handler(TransfersList.GID[TransfersList.Selected[i]], Param);
   end;
 end;
 
@@ -835,22 +636,22 @@ begin
       if Visible then
       try //TODO: Request details only for visible items
         StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
-        BeginTransfersUpdate;
+        TransfersList.BeginUpdate;
         with FUpdateThread do
         begin
           if Assigned(Active) then
-            UpdateTransfers(Active);
+            TransfersList.Update(Active, Names);
           if Assigned(Waiting) then
-            UpdateTransfers(Waiting);
+            TransfersList.Update(Waiting, Names);
           if Assigned(Stopped) then
-            UpdateTransfers(Stopped);
+            TransfersList.Update(Stopped, Names);
           StatusBar.SetPartText(Ord(sbDownSpeed), 0, 'Down: ' + SizeToStr(Stats.Int[sfDownloadSpeed]) + '/s');
           StatusBar.SetPartText(Ord(sbUpSpeed), 0, 'Up: ' + SizeToStr(Stats.Int[sfUploadSpeed]) + '/s');
           StatusBar.SetPartText(Ord(sbStats), 0, Format('Active: %d; Waiting: %d; Stopped: %d', [Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped]]));
         end;
         Info.Update(FUpdateThread);
       finally
-        EndTransfersUpdate;
+        TransfersList.EndUpdate;
       end;
     end
     else
@@ -888,7 +689,6 @@ procedure TMainForm.SaveSettings;
 begin
   Settings.SaveFormState(ClassName, Self);
   Settings.WriteInteger(ClassName, SSplitter, Splitter.Top);
-  SaveListColumns(TransfersList, STransferColumns, FTransferColumns, DefTransferColumns);
   EventBus.SendEvent(FEvSaveSettings, Self, []);
 end;
 
@@ -903,7 +703,7 @@ begin
   Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
   FRequestTransport.Disconnect;
   FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
-  ClearTransfersList;
+  TransfersList.Clear;
   ClearStatusBar;
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;
@@ -927,56 +727,7 @@ begin
   FUpdateThread.StatsOnly := not Visible;
   FUpdateThread.InfoGID := Info.GID;
   FUpdateThread.InfoKeys := Info.UpdateKeys;
-  if FUpdateTransferKeys then
-  begin
-    SetArray(FUpdateThread.TransferKeys, FTransferKeys);
-    FUpdateTransferKeys := false;
-    Finalize(FTransferKeys);
-  end;
-end;
-
-procedure TMainForm.UpdateTransfers(List: TAria2Struct);
-var
-  i, j, Image, TopItem, BottomItem: Integer;
-  P: PChar;
-  S: string;
-  Pt: TPoint;
-begin
-  TopItem := TransfersList.Perform(LVM_GETTOPINDEX, 0, 0);
-  BottomItem := TopItem + TransfersList.Perform(LVM_GETCOUNTPERPAGE, 0, 0);
-  for i := 0 to List.Length[''] - 1 do
-  begin
-    List.Index := i;
-    if FTransfersUpdate.Item >= TransfersList.ItemCount then
-    begin
-      FTransfersUpdate.Item := TransfersList.ItemAdd('');
-      GetMem(P, 32);
-      ZeroMemory(P, 32);
-      TransfersList.ItemObject[FTransfersUpdate.Item] := TObject(P);
-    end;
-    TransfersList.Perform(LVM_GETORIGIN, 0, Integer(@Pt));
-    if GetGID(FTransfersUpdate.Item) <> List[sfGID] then
-      LStrCpy(PChar(TransfersList.ItemObject[FTransfersUpdate.Item]), PChar(List[sfGID]))
-    else if (FTransfersUpdate.Item < TopItem) or (FTransfersUpdate.Item > BottomItem) then
-    begin
-      Inc(FTransfersUpdate.Item); //TODO: refresh items on scrolling
-      Continue;
-    end;
-    for j := Low(FTransferColumns) to High(FTransferColumns) do
-    begin
-      S := GetFieldValue(List, FUpdateThread.Names, FTransferColumns[j].FType, FTransferColumns[j].Field);
-      if TransfersList.Items[FTransfersUpdate.Item, j] <> S then
-        TransfersList.Items[FTransfersUpdate.Item, j] := S;
-    end;
-    Image := StrToEnum(List[sfStatus], sfStatusValues);
-    if (TAria2Status(Image) in [asActive, asWaiting]) and Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
-      Inc(Image, 6);
-    if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) or List.Has[sfVerifiedLength] then
-      Image := 8;
-    if TransfersList.ItemImageIndex[FTransfersUpdate.Item] <> Image then
-      TransfersList.ItemImageIndex[FTransfersUpdate.Item] := Image;
-    Inc(FTransfersUpdate.Item);
-  end;
+  FUpdateThread.TransferKeys := TransfersList.UpdateKeys;
 end;
 
 procedure TMainForm.WMContextMenu(var Msg: TWMContextMenu);
@@ -990,7 +741,7 @@ begin
   inherited;
   if Assigned(TransfersList) and (PNMHdr(Msg.NMHdr).hwndFrom = TransfersList.Handle) then
     if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
-      Info.GID := GetGID(PNMListView(Msg.NMHdr).iItem);
+      Info.GID := TransfersList.GID[PNMListView(Msg.NMHdr).iItem];
 end;
 
 procedure TMainForm.TransferDblClick(Sender: TObject);
@@ -1039,7 +790,7 @@ end;
 function TPerServerStorage.GetPersistent(const Name: string): string;
 begin
   if Assigned(Self) then
-    Result := FormMain.Settings.ReadString(FSection, Name, '')
+    Result := Settings.ReadString(FSection, Name, '')
   else
     Result := '';
 end;
@@ -1055,7 +806,7 @@ end;
 procedure TPerServerStorage.PutPersistent(const Name, Value: string);
 begin
   if Assigned(Self) then
-    FormMain.Settings.WriteString(FSection, Name, Value);
+    Settings.WriteString(FSection, Name, Value);
 end;
 
 procedure TPerServerStorage.PutTemporary(const Name: string; const Value: TObject);

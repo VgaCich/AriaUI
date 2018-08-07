@@ -7,14 +7,13 @@ interface
 
 uses
   Windows, Messages, CommCtrl, AvL, avlUtils, avlListViewEx, avlEventBus,
-  MainForm, InfoPane, Aria2, UpdateThread;
+  Utils, InfoPane, Aria2, UpdateThread;
 
 type
   TChangeSelection = (csAdd, csRemove, csInvert);
   TPageFiles = class(TInfoPage)
   private
     FFilesColumns: TListColumns;
-    FFilesIcons: TImageList;
     FDir: string;
     FilesList: TListViewEx;
     FilesMenu: TMenu;
@@ -43,7 +42,7 @@ const
 implementation
 
 uses
-  Utils;
+  MainForm;
 
 type
   TMenuID = (IDMenuFiles = 20000, IDRefresh, IDSelectAll, IDFilesSep0, IDOpen, IDOpenFolder, IDRename, IDFilesSep1, IDSelect, IDDeselect, IDInvertSelection);
@@ -70,18 +69,20 @@ const
 { TPageFiles }
 
 constructor TPageFiles.Create(Parent: TInfoPane);
+var
+  Images: TImageList;
 begin
   inherited;
   SetArray(FUpdateKeys, [sfGID]);
   FilesMenu := TMenu.Create(Self, false, MenuFiles);
-  FFilesIcons := TImageList.Create;
-  FFilesIcons.LoadSystemIcons(true);
   FilesList := TListViewEx.Create(Self);
   FilesList.SetPosition(0, 0);
   FilesList.Style := FilesList.Style and not LVS_SINGLESEL or LVS_SHOWSELALWAYS or LVS_SORTASCENDING or LVS_EDITLABELS or LVS_NOSORTHEADER; //TODO: switches for sorting & etc
   FilesList.ViewStyle := LVS_REPORT;
   FilesList.OptionsEx := FilesList.OptionsEx or LVS_EX_FULLROWSELECT or LVS_EX_GRIDLINES or LVS_EX_INFOTIP;
-  FilesList.SmallImages := FFilesIcons;
+  Images := TImageList.Create;
+  Images.LoadSystemIcons(true);
+  FilesList.SmallImages := Images;
   FilesList.OnDblClick := FilesDblClick;
   FilesList.OnKeyDown := FilesKeyDown;
   OnResize := Resize;
@@ -93,8 +94,8 @@ destructor TPageFiles.Destroy;
 begin
   EventBus.RemoveListeners([LoadSettings, SaveSettings]);
   Finalize(FFilesColumns);
-  FFilesIcons.Handle := 0;
-  FreeAndNil(FFilesIcons);
+  FilesList.SmallImages.Handle := 0;
+  FilesList.SmallImages.Free;
   inherited;
 end;
 
@@ -251,12 +252,12 @@ end;
 
 procedure TPageFiles.LoadSettings(Sender: TObject; const Args: array of const);
 begin
-  (Sender as TMainForm).LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
+  LoadListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns, nil);
 end;
 
 procedure TPageFiles.SaveSettings(Sender: TObject; const Args: array of const);
 begin
-  (Sender as TMainForm).SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
+  SaveListColumns(FilesList, SFilesColumns, FFilesColumns, DefFilesColumns);
 end;
 
 procedure TPageFiles.Update(UpdateThread: TUpdateThread);
