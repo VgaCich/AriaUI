@@ -90,7 +90,6 @@ begin
                Result := Names.Values[List[sfGID]];
     ftStatus, ftLongStatus: begin
                  Result := List[sfStatus];
-                 if Length(Result) > 0 then Result[1] := UpCase(Result[1]);
                  if Boolean(StrToEnum(List[sfSeeder], sfBoolValues)) then
                    Result := Result + StatusSeeding[FType = ftLongStatus];
                  if Boolean(StrToEnum(List[sfVerifyPending], sfBoolValues)) then

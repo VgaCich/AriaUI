@@ -4,6 +4,7 @@ unit MainForm;
 //TODO: Uncaught exception on InfoPane tab switching (Files->Info) (problems with file icons on large lists)
 //TODO: Heartbeat indicator
 //TODO: scroll TransfersList to end
+//TODO: "Minimize to taskbar" option 
 
 interface
 
@@ -98,6 +99,7 @@ const
   EvUpdate = 'MainForm.Update'; //[UpdateThread]
   AppCaption = 'Aria UI';
   SServers = 'Servers';
+  STransport = 'Transport';
   SServer = 'Server.';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
   SDebug = 'Debug';
@@ -247,7 +249,14 @@ begin
   FMinHeight := 300;
   FMinWidth := 400;
   Settings.RestoreFormState(ClassName, Self);
-  FRequestTransport := TRequestTransport.Create;
+  if Settings.ReadString(SServers, STransport, '') = '' then
+    FRequestTransport := TWininetRequestTransport.Create
+  else try
+    FRequestTransport := TExternalRequestTransport.Create(Settings.ReadString(SServers, STransport, ''));
+  except
+    ShowException;
+    FRequestTransport := TWininetRequestTransport.Create;
+  end;
   FAria2 := TAria2.Create(FRequestTransport.SendRequest);
   FUpdateThread := TUpdateThread.Create(FAria2);
   FUpdateThread.BeforeUpdate := UpdateKeys;
@@ -307,7 +316,8 @@ begin
   FreeAndNil(MainMenu);
   FreeAndNil(TrayMenu);
   FreeAndNil(TransfersMenu);
-  ToolBar.Images.Free;
+  if Assigned(ToolBar) then
+    ToolBar.Images.Free;
   inherited;
 end;
 
@@ -547,6 +557,7 @@ end;
 
 procedure TMainForm.ExitProgram;
 begin
+  //TODO: Lock tray icon
   if Visible then Hide;
   Close;
 end;

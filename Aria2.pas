@@ -1036,12 +1036,26 @@ begin
 end;
 
 procedure TAria2.BeginBatch;
+var
+  i: Integer;
+  Time: Word;
+  ID: TRequestID;
 begin
   if FBatchRequest <> '' then Exit;
   FBatchLock.Acquire;
   FRequestLock.Acquire;
   try
     FBatchRequest := '[';
+    Time := GetTime;
+    for i := 0 to High(FResults) do
+    begin
+      ID := JsonInt(JsonItem(FResults[i], 'id'));
+      if (ID <> 0) and (Time - ((ID shr TimeShift) and TimeMask) > 300) then
+      begin
+        JsonFree(FResults[i]);
+        FResults[i] := nil;
+      end;
+    end;
   finally
     FRequestLock.Release;
   end;
@@ -1067,6 +1081,7 @@ begin
     end;
   finally
     FBatchRequest := '';
+    JsonFree(Res);
     FRequestLock.Release;
     FBatchLock.Release;
   end;
@@ -1111,12 +1126,10 @@ function TAria2.GetResult(RequestID: TRequestID; ValueType: TAria2RequestValueTy
 var
   i: Integer;
   ID: TRequestID;
-  Time: Word;
   Res: PJsonValue;
 begin
   Res := nil;
   Result := nil;
-  Time := GetTime;
   FBatchLock.Acquire;
   try
     FRequestLock.Acquire;
@@ -1129,11 +1142,6 @@ begin
           Res := FResults[i];
           FResults[i] := nil;
           Break;
-        end;
-        if Time - ((ID shr TimeShift) and TimeMask) > 300 then
-        begin
-          JsonFree(FResults[i]);
-          FResults[i] := nil;
         end;
       end;
     finally

@@ -6,7 +6,24 @@ uses
   Windows, WinInet, AvL, avlSyncObjs;
 
 type
+  PExternalTransportResponce = ^ TExternalTransportResponce;
+  TExternalTransportResponce = record
+    Data: Pointer;
+    Length: Integer;
+    Free: procedure(P: PExternalTransportResponce); stdcall;
+  end;
+  TExternalTransportCreate = function: Pointer; stdcall;
+  TExternalTransportFree = procedure(Inst: Pointer); stdcall;
+  TExternalTransportConnect = function(Inst: Pointer; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
+  TExternalTransportDisconnect = procedure(Inst: Pointer); stdcall;
+  TExternalTransportSendRequest = function(Inst, Data: Pointer; Length: Integer): PExternalTransportResponce; stdcall;
   TRequestTransport = class
+  public
+    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean); virtual; abstract;
+    procedure Disconnect; virtual; abstract;
+    function SendRequest(Sender: TObject; const Request: string): string; virtual; abstract;
+  end;
+  TWininetRequestTransport = class(TRequestTransport)
   private
     FSession, FConnection: HINTERNET;
     FRequestFlags: Cardinal;
@@ -14,16 +31,32 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
-    procedure Disconnect;
-    function SendRequest(Sender: TObject; const Request: string): string;
+    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean); override;
+    procedure Disconnect; override;
+    function SendRequest(Sender: TObject; const Request: string): string; override;
+  end;
+  TExternalRequestTransport = class(TRequestTransport)
+  private
+    FLib: HMODULE;
+    FCreate: TExternalTransportCreate;
+    FFree: TExternalTransportFree;
+    FConnect: TExternalTransportConnect;
+    FDisconnect: TExternalTransportDisconnect;
+    FSendRequest: TExternalTransportSendRequest;
+    FInstance: Pointer;
+  public
+    constructor Create(const Lib: string);
+    destructor Destroy; override;
+    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean); override;
+    procedure Disconnect; override;
+    function SendRequest(Sender: TObject; const Request: string): string; override;
   end;
 
 implementation
 
-{ TRequestTransport }
+{ TWininetRequestTransport }
 
-constructor TRequestTransport.Create;
+constructor TWininetRequestTransport.Create;
 begin
   inherited Create;
   FRequestLock := TCriticalSection.Create;
@@ -32,7 +65,7 @@ begin
   //INTERNET_OPTION_CONNECTED_STATE
 end;
 
-destructor TRequestTransport.Destroy;
+destructor TWininetRequestTransport.Destroy;
 begin
   Disconnect;
   if Assigned(FSession) then
@@ -41,7 +74,7 @@ begin
   inherited;
 end;
 
-procedure TRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
+procedure TWininetRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
 begin
   if FSession = nil then
     raise Exception.Create('WinInet not initialized');
@@ -59,7 +92,7 @@ begin
   end;
 end;
 
-procedure TRequestTransport.Disconnect;
+procedure TWininetRequestTransport.Disconnect;
 begin
   FRequestLock.Acquire;
   try
@@ -71,7 +104,7 @@ begin
   end;
 end;
 
-function TRequestTransport.SendRequest(Sender: TObject; const Request: string): string;
+function TWininetRequestTransport.SendRequest(Sender: TObject; const Request: string): string;
 var
   Req: HINTERNET;
   Len, Avail, Read: Cardinal;
@@ -102,6 +135,52 @@ begin
   finally
     FRequestLock.Release;
   end;
+end;
+
+{ TExternalRequestTransport }
+
+constructor TExternalRequestTransport.Create(const Lib: string);
+begin
+  inherited Create;
+  FLib := LoadLibrary(PChar(Lib));
+  if FLib = 0 then
+    raise Exception.Create('Can''t load library ' + Lib);
+  FCreate := GetProcAddress(FLib, 'Create');
+  FFree := GetProcAddress(FLib, 'Free');
+  FConnect := GetProcAddress(FLib, 'Connect');
+  FDisconnect := GetProcAddress(FLib, 'Disconnect');
+  FSendRequest := GetProcAddress(FLib, 'SendRequest');
+  Assert(Assigned(FCreate) and Assigned(FFree) and Assigned(FConnect) and Assigned(FDisconnect) and Assigned(FSendRequest), 'Invalid transport library');
+  FInstance := FCreate();
+end;
+
+destructor TExternalRequestTransport.Destroy;
+begin
+  if Assigned(FFree) and Assigned(FInstance) then
+    FFree(FInstance);
+  FreeLibrary(FLib);
+  inherited;
+end;
+
+procedure TExternalRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
+begin
+  if not FConnect(FInstance, PChar(Server), Port, PChar(UserName), PChar(Password), UseSSL) then
+    raise Exception.Create('ExternalTransport.Connect failed');
+end;
+
+procedure TExternalRequestTransport.Disconnect;
+begin
+  FDisconnect(FInstance);
+end;
+
+function TExternalRequestTransport.SendRequest(Sender: TObject; const Request: string): string;
+var
+  Res: PExternalTransportResponce;
+begin
+  Res := FSendRequest(FInstance, @Request[1], Length(Request));
+  SetLength(Result, Res.Length);
+  Move(Res.Data^, Result[1], Res.Length);
+  Res.Free(Res); 
 end;
 
 end.
