@@ -178,6 +178,8 @@ var
   Res: PExternalTransportResponce;
 begin
   Res := FSendRequest(FInstance, @Request[1], Length(Request));
+  if not Assigned(Res) then
+    raise Exception.Create('ExternalTransport.SendRequest failed');
   SetLength(Result, Res.Length);
   Move(Res.Data^, Result[1], Res.Length);
   Res.Free(Res); 

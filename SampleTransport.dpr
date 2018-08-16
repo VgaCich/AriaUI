@@ -52,6 +52,7 @@ begin
       InternetCloseHandle(Session);
     DeleteCriticalSection(RequestLock);
   end;
+  Dispose(Inst);
 end;
 
 function Connect(Inst: Pointer; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
