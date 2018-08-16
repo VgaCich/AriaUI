@@ -6,7 +6,7 @@ uses
   Windows, WinInet, AvL, avlSyncObjs;
 
 type
-  PExternalTransportResponce = ^ TExternalTransportResponce;
+  PExternalTransportResponce = ^TExternalTransportResponce;
   TExternalTransportResponce = record
     Data: Pointer;
     Length: Integer;

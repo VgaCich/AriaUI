@@ -1,168 +1,135 @@
 library SampleTransport;
 
 uses
-  SysSfIni, Windows, WinInet, AvL, avlSyncObjs;
+  Windows, WinInet;
 
 type
-  PExternalTransportResponce = ^ TExternalTransportResponce;
+  PExternalTransportResponce = ^TExternalTransportResponce;
   TExternalTransportResponce = record
     Data: Pointer;
     Length: Integer;
     Free: procedure(P: PExternalTransportResponce); stdcall;
   end;
-  TWininetRequestTransport = class
-  private
-    FSession, FConnection: HINTERNET;
-    FRequestFlags: Cardinal;
-    FRequestLock: TCriticalSection;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
-    procedure Disconnect;
-    function SendRequest(Sender: TObject; const Request: string): string;
+  PTransportInstance = ^TTransportInstance;
+  TTransportInstance = record
+    Session, Connection: HINTERNET;
+    RequestFlags: Cardinal;
+    RequestLock: TRTLCriticalSection;
   end;
+
+function IntToStr(I: Integer): string;
+begin
+  Str(I, Result);
+end;
 
 procedure FreeResponce(P: PExternalTransportResponce); stdcall;
 begin
+  if not Assigned(P) then Exit;
   FreeMem(P.Data);
   Dispose(P);
 end;
 
 function Create: Pointer; stdcall;
 begin
-  Result := TWininetRequestTransport.Create;
+  New(PTransportInstance(Result));
+  ZeroMemory(Result, SizeOf(TTransportInstance));
+  with PTransportInstance(Result)^ do
+  begin
+    InitializeCriticalSection(RequestLock);
+    Session := InternetOpen('AriaUI Sample Transport', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
+  end;
 end;
+
+procedure Disconnect(Inst: Pointer); stdcall; forward;
 
 procedure Free(Inst: Pointer); stdcall;
 begin
-  if Assigned(Inst) then
-    TObject(Inst).Free;
+  if not Assigned(Inst) then Exit;
+  with PTransportInstance(Inst)^ do
+  begin
+    Disconnect(Inst);
+    if Assigned(Session) then
+      InternetCloseHandle(Session);
+    DeleteCriticalSection(RequestLock);
+  end;
 end;
 
 function Connect(Inst: Pointer; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
 begin
   Result := false;
-  if Assigned(Inst) then
-  try
-    TWininetRequestTransport(Inst).Connect(Server, Port, UserName, Password, UseSSL);
-    Result := true;
-  except
+  if not Assigned(Inst) then Exit;
+  with PTransportInstance(Inst)^ do
+  begin
+    if not Assigned(Session) then Exit;
+    Disconnect(Inst);
+    EnterCriticalSection(RequestLock);
+    try
+      Connection := InternetConnect(Session, Server, Port, UserName, Password, INTERNET_SERVICE_HTTP, INTERNET_FLAG_EXISTING_CONNECT, 0);
+      if not Assigned(Connection) then Exit;
+      RequestFlags := INTERNET_FLAG_KEEP_CONNECTION or INTERNET_FLAG_DONT_CACHE or INTERNET_FLAG_NO_COOKIES or INTERNET_FLAG_PRAGMA_NOCACHE or INTERNET_FLAG_RELOAD;
+      if UseSSL then
+        RequestFlags := RequestFlags or INTERNET_FLAG_SECURE;
+      Result := true;
+    finally
+      LeaveCriticalSection(RequestLock);
+    end;
   end;
 end;
 
 procedure Disconnect(Inst: Pointer); stdcall;
 begin
-  if Assigned(Inst) then
-    TWininetRequestTransport(Inst).Disconnect;
+  if not Assigned(Inst) then Exit;
+  with PTransportInstance(Inst)^ do
+  begin
+    EnterCriticalSection(RequestLock);
+    try
+      if Assigned(Connection) then
+        InternetCloseHandle(Connection);
+      Connection := nil;
+    finally
+      LeaveCriticalSection(RequestLock);
+    end;
+  end;
 end;
 
 function SendRequest(Inst, Data: Pointer; Length: Integer): PExternalTransportResponce; stdcall;
 var
-  S: string;
+  Req: HINTERNET;
+  Avail, Read: Cardinal;
 begin
   Result := nil;
-  if Assigned(Inst) then
-  try
-    SetLength(S, Length);
-    Move(Data^, S[1], Length);
-    S := TWininetRequestTransport(Inst).SendRequest(nil, S);
-    New(Result);
-    Result.Length := System.Length(S);
-    GetMem(Result.Data, Result.Length);
-    Move(S[1], Result.Data^, Result.Length);
-    Result.Free := FreeResponce;
-  except
-    FreeResponce(Result);
-    Result := nil;
-  end
-end;
-
-{ TWininetRequestTransport }
-
-constructor TWininetRequestTransport.Create;
-begin
-  inherited Create;
-  FRequestLock := TCriticalSection.Create;
-  FSession := InternetOpen('AriaUI', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
-  //INTERNET_OPTION_CONNECT_TIMEOUT
-  //INTERNET_OPTION_CONNECTED_STATE
-end;
-
-destructor TWininetRequestTransport.Destroy;
-begin
-  Disconnect;
-  if Assigned(FSession) then
-    InternetCloseHandle(FSession);
-  FreeAndNil(FRequestLock);
-  inherited;
-end;
-
-procedure TWininetRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
-begin
-  if FSession = nil then
-    raise Exception.Create('WinInet not initialized');
-  Disconnect;
-  FRequestLock.Acquire;
-  try
-    FConnection := InternetConnect(FSession, PChar(Server), Port, PChar(UserName), PChar(Password), INTERNET_SERVICE_HTTP, INTERNET_FLAG_EXISTING_CONNECT, 0);
-    if FConnection = nil then
-      raise Exception.Create('Can''t connect to Aria2 server');
-    FRequestFlags := INTERNET_FLAG_KEEP_CONNECTION or INTERNET_FLAG_DONT_CACHE or INTERNET_FLAG_NO_COOKIES or INTERNET_FLAG_PRAGMA_NOCACHE or INTERNET_FLAG_RELOAD;
-    if UseSSL then
-      FRequestFlags := FRequestFlags or INTERNET_FLAG_SECURE{ or INTERNET_FLAG_IGNORE_CERT_CN_INVALID or INTERNET_FLAG_IGNORE_CERT_DATE_INVALID};
-  finally
-    FRequestLock.Release;
-  end;
-end;
-
-procedure TWininetRequestTransport.Disconnect;
-begin
-  FRequestLock.Acquire;
-  try
-    if Assigned(FConnection) then
-      InternetCloseHandle(FConnection);
-    FConnection := nil;
-  finally
-    FRequestLock.Release;
-  end;
-end;
-
-function TWininetRequestTransport.SendRequest(Sender: TObject; const Request: string): string;
-var
-  Req: HINTERNET;
-  Len, Avail, Read: Cardinal;
-begin
-  Result := '';
-  if FConnection = nil then
-    raise Exception.Create('No connection to Aria2 server');
-  FRequestLock.Acquire;
-  try
-    Req := HttpOpenRequest(FConnection, 'POST', '/jsonrpc', nil, nil, nil, FRequestFlags, 0);
-    if Req = nil then
-      raise Exception.Create('Can''t open request');
+  if not Assigned(Inst) then Exit;
+  with PTransportInstance(Inst)^ do
+  begin
+    if not Assigned(Connection) then Exit;
+    EnterCriticalSection(RequestLock);
     try
-      if not HttpSendRequest(Req, PChar('Content-Length: ' + IntToStr(Length(Request))), Cardinal(-1), PChar(Request), Length(Request)) then
-        raise Exception.Create('Can''t send request');
-      while InternetQueryDataAvailable(Req, Avail, 0, 0) do
-      begin
-        if Avail = 0 then Break;
-        Len := Length(Result);
-        SetLength(Result, Len + Avail);
-        if not InternetReadFile(Req, @Result[Len + 1], Avail, Read) then Break;
-        if Read < Avail then
-          SetLength(Result, Length(Result) - Avail + Read);
+      Req := HttpOpenRequest(Connection, 'POST', '/jsonrpc', nil, nil, nil, RequestFlags, 0);
+      if not Assigned(Req) then Exit;
+      try
+        if not HttpSendRequest(Req, PChar('Content-Length: ' + IntToStr(Length)), Cardinal(-1), Data, Length) then Exit;
+        New(Result);
+        ZeroMemory(Result, SizeOf(TExternalTransportResponce));
+        Result.Free := FreeResponce;
+        while InternetQueryDataAvailable(Req, Avail, 0, 0) do
+        begin
+          if Avail = 0 then Break;
+          ReallocMem(Result.Data, Cardinal(Result.Length) + Avail);
+          if not InternetReadFile(Req, Pointer(Cardinal(Result.Data) + Cardinal(Result.Length)), Avail, Read) then Break;
+          Inc(Result.Length, Read);
+        end;
+      finally
+        InternetCloseHandle(Req);
       end;
     finally
-      InternetCloseHandle(Req);
+      LeaveCriticalSection(RequestLock);
     end;
-  finally
-    FRequestLock.Release;
-  end;
+  end
 end;
 
 exports
   Create, Free, Connect, Disconnect, SendRequest;
 
 begin
+  IsMultiThread := true;
 end.
