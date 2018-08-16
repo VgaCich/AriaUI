@@ -3,15 +3,12 @@ library SampleTransport;
 uses
   Windows, WinInet;
 
+{$I ExternalTransport.inc}
+
 type
-  PExternalTransportResponce = ^TExternalTransportResponce;
-  TExternalTransportResponce = record
-    Data: Pointer;
-    Length: Integer;
-    Free: procedure(P: PExternalTransportResponce); stdcall;
-  end;
   PTransportInstance = ^TTransportInstance;
   TTransportInstance = record
+    BaseInstance: TExternalTransportInstance;
     Session, Connection: HINTERNET;
     RequestFlags: Cardinal;
     RequestLock: TRTLCriticalSection;
@@ -22,47 +19,21 @@ begin
   Str(I, Result);
 end;
 
-procedure FreeResponce(P: PExternalTransportResponce); stdcall;
+procedure FreeResponse(Self: PExternalTransportResponse); stdcall;
 begin
-  if not Assigned(P) then Exit;
-  FreeMem(P.Data);
-  Dispose(P);
+  if not Assigned(Self) then Exit;
+  FreeMem(Self.Data);
+  Dispose(Self);
 end;
 
-function Create: Pointer; stdcall;
-begin
-  New(PTransportInstance(Result));
-  ZeroMemory(Result, SizeOf(TTransportInstance));
-  with PTransportInstance(Result)^ do
-  begin
-    InitializeCriticalSection(RequestLock);
-    Session := InternetOpen('AriaUI Sample Transport', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
-  end;
-end;
-
-procedure Disconnect(Inst: Pointer); stdcall; forward;
-
-procedure Free(Inst: Pointer); stdcall;
-begin
-  if not Assigned(Inst) then Exit;
-  with PTransportInstance(Inst)^ do
-  begin
-    Disconnect(Inst);
-    if Assigned(Session) then
-      InternetCloseHandle(Session);
-    DeleteCriticalSection(RequestLock);
-  end;
-  Dispose(Inst);
-end;
-
-function Connect(Inst: Pointer; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
+function Connect(Self: PExternalTransportInstance; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
 begin
   Result := false;
-  if not Assigned(Inst) then Exit;
-  with PTransportInstance(Inst)^ do
+  if not Assigned(Self) then Exit;
+  with PTransportInstance(Self)^ do
   begin
     if not Assigned(Session) then Exit;
-    Disconnect(Inst);
+    BaseInstance.Disconnect(Self);
     EnterCriticalSection(RequestLock);
     try
       Connection := InternetConnect(Session, Server, Port, UserName, Password, INTERNET_SERVICE_HTTP, INTERNET_FLAG_EXISTING_CONNECT, 0);
@@ -77,10 +48,10 @@ begin
   end;
 end;
 
-procedure Disconnect(Inst: Pointer); stdcall;
+procedure Disconnect(Self: PExternalTransportInstance); stdcall;
 begin
-  if not Assigned(Inst) then Exit;
-  with PTransportInstance(Inst)^ do
+  if not Assigned(Self) then Exit;
+  with PTransportInstance(Self)^ do
   begin
     EnterCriticalSection(RequestLock);
     try
@@ -93,14 +64,14 @@ begin
   end;
 end;
 
-function SendRequest(Inst, Data: Pointer; Length: Integer): PExternalTransportResponce; stdcall;
+function SendRequest(Self: PExternalTransportInstance; Data: Pointer; Length: Integer): PExternalTransportResponse; stdcall;
 var
   Req: HINTERNET;
   Avail, Read: Cardinal;
 begin
   Result := nil;
-  if not Assigned(Inst) then Exit;
-  with PTransportInstance(Inst)^ do
+  if not Assigned(Self) then Exit;
+  with PTransportInstance(Self)^ do
   begin
     if not Assigned(Connection) then Exit;
     EnterCriticalSection(RequestLock);
@@ -110,8 +81,8 @@ begin
       try
         if not HttpSendRequest(Req, PChar('Content-Length: ' + IntToStr(Length)), Cardinal(-1), Data, Length) then Exit;
         New(Result);
-        ZeroMemory(Result, SizeOf(TExternalTransportResponce));
-        Result.Free := FreeResponce;
+        ZeroMemory(Result, SizeOf(TExternalTransportResponse));
+        Result.Free := FreeResponse;
         while InternetQueryDataAvailable(Req, Avail, 0, 0) do
         begin
           if Avail = 0 then Break;
@@ -128,8 +99,36 @@ begin
   end
 end;
 
+procedure FreeInstance(Self: PExternalTransportInstance); stdcall;
+begin
+  if not Assigned(Self) then Exit;
+  with PTransportInstance(Self)^ do
+  begin
+    BaseInstance.Disconnect(Self);
+    if Assigned(Session) then
+      InternetCloseHandle(Session);
+    DeleteCriticalSection(RequestLock);
+  end;
+  Dispose(PTransportInstance(Self));
+end;
+
+function TransportCreate: PExternalTransportInstance; stdcall;
+begin
+  New(PTransportInstance(Result));
+  ZeroMemory(Result, SizeOf(TTransportInstance));
+  with PTransportInstance(Result)^ do
+  begin
+    BaseInstance.Connect := Connect;
+    BaseInstance.Disconnect := Disconnect;
+    BaseInstance.SendRequest := SendRequest;
+    BaseInstance.Free := FreeInstance;
+    InitializeCriticalSection(RequestLock);
+    Session := InternetOpen('AriaUI Sample Transport', INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
+  end;
+end;
+
 exports
-  Create, Free, Connect, Disconnect, SendRequest;
+  TransportCreate;
 
 begin
   IsMultiThread := true;

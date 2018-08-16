@@ -5,18 +5,9 @@ interface
 uses
   Windows, WinInet, AvL, avlSyncObjs;
 
+{$I ExternalTransport.inc}
+
 type
-  PExternalTransportResponce = ^TExternalTransportResponce;
-  TExternalTransportResponce = record
-    Data: Pointer;
-    Length: Integer;
-    Free: procedure(P: PExternalTransportResponce); stdcall;
-  end;
-  TExternalTransportCreate = function: Pointer; stdcall;
-  TExternalTransportFree = procedure(Inst: Pointer); stdcall;
-  TExternalTransportConnect = function(Inst: Pointer; Server: PChar; Port: Word; UserName, Password: PChar; UseSSL: LongBool): LongBool; stdcall;
-  TExternalTransportDisconnect = procedure(Inst: Pointer); stdcall;
-  TExternalTransportSendRequest = function(Inst, Data: Pointer; Length: Integer): PExternalTransportResponce; stdcall;
   TRequestTransport = class
   public
     procedure Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean); virtual; abstract;
@@ -38,12 +29,7 @@ type
   TExternalRequestTransport = class(TRequestTransport)
   private
     FLib: HMODULE;
-    FCreate: TExternalTransportCreate;
-    FFree: TExternalTransportFree;
-    FConnect: TExternalTransportConnect;
-    FDisconnect: TExternalTransportDisconnect;
-    FSendRequest: TExternalTransportSendRequest;
-    FInstance: Pointer;
+    FTransportInstance: PExternalTransportInstance;
   public
     constructor Create(const Lib: string);
     destructor Destroy; override;
@@ -140,44 +126,43 @@ end;
 { TExternalRequestTransport }
 
 constructor TExternalRequestTransport.Create(const Lib: string);
+var
+  TransportCreate: TExternalTransportCreate;
 begin
   inherited Create;
   FLib := LoadLibrary(PChar(Lib));
   if FLib = 0 then
     raise Exception.Create('Can''t load library ' + Lib);
-  FCreate := GetProcAddress(FLib, 'Create');
-  FFree := GetProcAddress(FLib, 'Free');
-  FConnect := GetProcAddress(FLib, 'Connect');
-  FDisconnect := GetProcAddress(FLib, 'Disconnect');
-  FSendRequest := GetProcAddress(FLib, 'SendRequest');
-  Assert(Assigned(FCreate) and Assigned(FFree) and Assigned(FConnect) and Assigned(FDisconnect) and Assigned(FSendRequest), 'Invalid transport library');
-  FInstance := FCreate();
+  TransportCreate := GetProcAddress(FLib, 'TransportCreate');
+  if not Assigned(TransportCreate) then
+    raise Exception.Create('Invalid request transport library');
+  FTransportInstance := TransportCreate();
 end;
 
 destructor TExternalRequestTransport.Destroy;
 begin
-  if Assigned(FFree) and Assigned(FInstance) then
-    FFree(FInstance);
+  if Assigned(FTransportInstance) then
+    FTransportInstance.Free(FTransportInstance);
   FreeLibrary(FLib);
   inherited;
 end;
 
 procedure TExternalRequestTransport.Connect(const Server: string; Port: Word; const UserName, Password: string; UseSSL: Boolean);
 begin
-  if not FConnect(FInstance, PChar(Server), Port, PChar(UserName), PChar(Password), UseSSL) then
+  if not FTransportInstance.Connect(FTransportInstance, PChar(Server), Port, PChar(UserName), PChar(Password), UseSSL) then
     raise Exception.Create('ExternalTransport.Connect failed');
 end;
 
 procedure TExternalRequestTransport.Disconnect;
 begin
-  FDisconnect(FInstance);
+  FTransportInstance.Disconnect(FTransportInstance);
 end;
 
 function TExternalRequestTransport.SendRequest(Sender: TObject; const Request: string): string;
 var
-  Res: PExternalTransportResponce;
+  Res: PExternalTransportResponse;
 begin
-  Res := FSendRequest(FInstance, @Request[1], Length(Request));
+  Res := FTransportInstance.SendRequest(FTransportInstance, @Request[1], Length(Request));
   if not Assigned(Res) then
     raise Exception.Create('ExternalTransport.SendRequest failed');
   SetLength(Result, Res.Length);
