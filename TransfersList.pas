@@ -16,6 +16,7 @@ type
     FColumns: TListColumns;
     FUpdateKeys: TStringArray;
     FSearchString: string;
+    procedure Cleanup(Sender: TObject);
     procedure AddTransferKey(const Column: TListColumn);
     function GetGID(Index: Integer): TAria2GID;
     procedure LoadSettings(Sender: TObject; const Args: array of const);
@@ -36,9 +37,6 @@ const
   STransferColumns = 'TransferListColumns';
 
 implementation
-
-uses
-  MainForm;
 
 const
   DefTransferColumns: array[0..10] of TListColumn = (
@@ -65,12 +63,12 @@ begin
   SmallImages := LoadImageList('TLICONS');
   EventBus.AddListener(EvLoadSettings, LoadSettings);
   EventBus.AddListener(EvSaveSettings, SaveSettings);
+  OnDestroy := Cleanup;
 end;
 
 destructor TTransfersList.Destroy;
 begin
   EventBus.RemoveListeners([LoadSettings, SaveSettings]);
-  Clear;
   Finalize(FColumns);
   Finalize(FUpdateKeys);
   SmallImages.Free;
@@ -192,6 +190,11 @@ begin
       ItemImageIndex[FUpdateState.Item] := Image;
     Inc(FUpdateState.Item);
   end;
+end;
+
+procedure TTransfersList.Cleanup(Sender: TObject);
+begin
+  Clear;
 end;
 
 procedure TTransfersList.AddTransferKey(const Column: TListColumn);

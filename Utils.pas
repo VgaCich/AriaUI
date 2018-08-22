@@ -17,6 +17,8 @@ type
   TListColumns = array of TListColumn;
   TListColumnCallback = procedure(const Column: TListColumn) of object;
 
+procedure InsertMenu(Menu, SubMenu: TMenu; const Name: string; ID: Cardinal);
+procedure FreeMenu(Menu: TMenu);
 procedure SetArray(var Dest: TStringArray; const Src: array of string);
 function First(const Pair: string; const Sep: Char = ':'): string;
 function Second(const Pair: string; const Sep: Char = ':'): string;
@@ -33,6 +35,8 @@ function DecodeURL(const URL: string): string;
 function LoadImageList(const Name: PChar): TImageList;
 
 const
+  EvLoadSettings = 'Global.LoadSettings'; //No params
+  EvSaveSettings = 'Global.SaveSettings'; //No params
   AppName = 'AriaUI';
   SCount = 'Count';
   SFieldCaption = 'Caption.';
@@ -46,6 +50,20 @@ var
   Settings: TSettings;
 
 implementation
+
+procedure InsertMenu(Menu, SubMenu: TMenu; const Name: string; ID: Cardinal);
+begin
+  SubMenu.Tag := Menu.Tag;
+  Menu.Tag := Integer(SubMenu);
+  Windows.InsertMenu(Menu.Handle, ID, MF_BYCOMMAND or MF_POPUP, SubMenu.Handle, PChar(Name));
+end;
+
+procedure FreeMenu(Menu: TMenu);
+begin
+  if Assigned(Pointer(Menu.Tag)) then
+    FreeMenu(TMenu(Menu.Tag));
+  Menu.Free;
+end;
 
 procedure SetArray(var Dest: TStringArray; const Src: array of string);
 var

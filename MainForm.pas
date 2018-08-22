@@ -11,40 +11,26 @@ interface
 uses
   Windows, CommCtrl, Messages, ShellAPI, AvL, avlUtils, avlSplitter,
   avlTrayIcon, avlJSON, avlEventBus, Utils, Aria2, RequestTransport,
-  UpdateThread, TransfersList, InfoPane;
+  UpdateThread, TransfersList, ServersList, InfoPane;
 
 type
   TTransferHandler = function(GID: TAria2GID; Param: Integer): Boolean of object;
-  TPerServerStorage = class
-  private
-    FSection: string;
-    FTemporary: TStringList;
-    function GetPersistent(const Name: string): string;
-    function GetTemporary(const Name: string): TObject;
-    procedure PutPersistent(const Name, Value: string);
-    procedure PutTemporary(const Name: string; const Value: TObject);
-  public
-    constructor Create(ServerIndex: Integer);
-    destructor Destroy; override;
-    property Persistent[const Name: string]: string read GetPersistent write PutPersistent;
-    property Temporary[const Name: string]: TObject read GetTemporary write PutTemporary; default;
-  end;
   TMainForm = class(TForm)
     MainMenu, TrayMenu, TransfersMenu: TMenu;
     ToolBar: TToolBar;
     StatusBar: TStatusBar;
     Splitter: TSplitter;
     TrayIcon: TAvLTrayIcon; //TODO: check icon re-creation on explorer restart
-    ServersList: TComboBoxEx;
+    ServersList: TServersList;
     TransfersList: TTransfersList;
     Info: TInfoPane;
   private
     FMinWidth, FMinHeight: Integer;
+    FExiting: Boolean;
     FEvLoadSettings, FEvSaveSettings, FEvServerChanged, FEvUpdate: Integer;
     FAccelTable: HAccel;
     FRequestTransport: TRequestTransport;
     FAria2: TAria2;
-    FCurServerStorage: TPerServerStorage;
     FUpdateThread: TUpdateThread;
     procedure AddMetalink(Sender: TObject);
     procedure AddTorrent(Sender: TObject);
@@ -67,7 +53,7 @@ type
     function RemoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
     procedure RepaintAll;
     function ResumeTransfer(GID: TAria2GID; Param: Integer): Boolean;
-    procedure ServerChange(Sender: TObject);
+    procedure ServerChange(Sender: TObject; PrevServer: TServerInfo);
     procedure ShowAbout;
     procedure ShowServerVersion;
     procedure SplitterMove(Sender: TObject);
@@ -79,13 +65,14 @@ type
     //procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;
     procedure WMSizing(var Msg: TWMMoving); message WM_SIZING;
     procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
+    function GetServer: TServerInfo;
   public
     constructor Create;
     destructor Destroy; override;
     procedure LoadSettings;
     procedure SaveSettings;
     property Aria2: TAria2 read FAria2;
-    property CurServerStorage: TPerServerStorage read FCurServerStorage;
+    property Server: TServerInfo read GetServer;
   end;
 
 var
@@ -93,23 +80,12 @@ var
 
 const
   //Sender: MainForm
-  EvLoadSettings = 'MainForm.LoadSettings'; //No params
-  EvSaveSettings = 'MainForm.SaveSettings'; //No params
-  EvServerChanged = 'MainForm.ServerChanged'; //[PrevServerStorage, CurServerStorage]
+  EvServerChanged = 'MainForm.ServerChanged'; //[PrevServer, CurServer]
   EvUpdate = 'MainForm.Update'; //[UpdateThread]
   AppCaption = 'Aria UI';
-  SServers = 'Servers';
   STransport = 'Transport';
-  SServer = 'Server.';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
   SDebug = 'Debug';
-  SCurrent = 'Current';
-  SHost = 'Host';
-  SPort = 'Port';
-  SUsername = 'Username';
-  SPassword = 'Password';
-  SToken = 'Token';
-  SUseSSL = 'UseSSL';
   SSplitter = 'Splitter';
 
 implementation
@@ -222,19 +198,11 @@ var
     (fVirt: FVIRTKEY; Key: VK_F1; Cmd: Ord(IDAbout)));
 
 constructor TMainForm.Create;
-
-  procedure AddMenu(const Name: string; ID: Cardinal; const Template: array of PChar);
-  var
-    Menu: TMenu;
-  begin
-    Menu := TMenu.Create(Self, false, Template);
-    InsertMenu(MainMenu.Handle, ID, MF_BYCOMMAND or MF_POPUP, Menu.Handle, PChar(Name));
-  end;
-
 var
   i: Integer;
 begin
   inherited Create(nil, AppCaption);
+  FExiting := false;
   //TODO: Detect first run and run first start wizard
   FEvLoadSettings := EventBus.RegisterEvent(EvLoadSettings);
   FEvSaveSettings := EventBus.RegisterEvent(EvSaveSettings);
@@ -262,10 +230,10 @@ begin
   FUpdateThread.BeforeUpdate := UpdateKeys;
   FUpdateThread.OnUpdate := Refresh;
   MainMenu := TMenu.Create(Self, true, ['0']);
-  AddMenu(MenuFileCapt, Ord(IDMenuFile), MenuFile);
-  AddMenu(MenuTransfersCapt, Ord(IDMenuTransfers), MenuTransfers);
-  AddMenu(MenuServerCapt, Ord(IDMenuServer), MenuServer);
-  AddMenu(MenuHelpCapt, Ord(IDMenuHelp), MenuHelp);
+  InsertMenu(MainMenu, TMenu.Create(Self, false, MenuFile), MenuFileCapt, Ord(IDMenuFile));
+  InsertMenu(MainMenu, TMenu.Create(Self, false, MenuTransfers), MenuTransfersCapt, Ord(IDMenuTransfers));
+  InsertMenu(MainMenu, TMenu.Create(Self, false, MenuServer), MenuServerCapt, Ord(IDMenuServer));
+  InsertMenu(MainMenu, TMenu.Create(Self, false, MenuHelp), MenuHelpCapt, Ord(IDMenuHelp));
   SetMenu(Handle, MainMenu.Handle);
   TrayMenu := TMenu.Create(Self, false, MenuTray);
   TransfersMenu := TMenu.Create(Self, false, MenuTransfers);
@@ -276,7 +244,7 @@ begin
   TrayIcon.OnMouseDown := TrayIconMouseDown;
   TrayIcon.Active := true;
   FAccelTable := CreateAcceleratorTable(Accels[0], Length(Accels));
-  ServersList := TComboBoxEx.Create(Self, csDropDownList);
+  ServersList := TServersList.Create(Self);
   ServersList.Hint := 'Select server';
   ServersList.OnChange := ServerChange;
   ToolBar := TToolBar.Create(Self, true);
@@ -313,9 +281,9 @@ begin
   FreeAndNil(FRequestTransport);
   DestroyAcceleratorTable(FAccelTable);
   FreeAndNil(TrayIcon);
-  FreeAndNil(MainMenu);
-  FreeAndNil(TrayMenu);
-  FreeAndNil(TransfersMenu);
+  FreeMenu(MainMenu);
+  FreeMenu(TrayMenu);
+  FreeMenu(TransfersMenu);
   if Assigned(ToolBar) then
     ToolBar.Images.Free;
   inherited;
@@ -323,6 +291,7 @@ end;
 
 procedure TMainForm.TrayIconMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
+  if FExiting then Exit;
   if Button = mbLeft then
     if Visible then
       Hide
@@ -557,17 +526,17 @@ end;
 
 procedure TMainForm.ExitProgram;
 begin
-  //TODO: Lock tray icon
+  FExiting := true;
+  TrayIcon.ToolTip := Caption + CRLF + 'Exiting...';
   if Visible then Hide;
   Close;
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;
 begin
-  Result := not Visible;
-  if Visible then
-    Hide
-  else
+  Result := FExiting;
+  Hide;
+  if FExiting then
     SaveSettings;
 end;
 
@@ -589,21 +558,9 @@ begin
 end;
 
 procedure TMainForm.LoadSettings;
-var
-  i: Integer;
 begin
-  FCurServerStorage := nil;
-  for i := 0 to ServersList.ItemCount - 1 do
-    ServersList.Objects[i].Free;
-  ServersList.Clear;
-  for i := 0 to Settings.ReadInteger(SServers, SCount, 0) - 1 do
-    ServersList.Objects[ServersList.ItemAdd(Settings.ReadString(SServers, IntToStr(i), '###'))] := TPerServerStorage.Create(i);
-  if ServersList.ItemCount = 0 then
-    ServersList.Objects[ServersList.ItemAdd('###')] := TPerServerStorage.Create(0);
-  ServersList.ItemIndex := Settings.ReadInteger(SServers, SCurrent, 0);
   EventBus.SendEvent(FEvLoadSettings, Self, []);
   RepaintAll;
-  ServerChange(ServersList);
 end;
 
 function TMainForm.MoveTransfer(GID: TAria2GID; Param: Integer): Boolean;
@@ -638,6 +595,7 @@ end;
 
 procedure TMainForm.Refresh;
 begin
+  if not FExiting then
   try
     if Assigned(FUpdateThread.Stats) then
     begin
@@ -703,23 +661,19 @@ begin
   EventBus.SendEvent(FEvSaveSettings, Self, []);
 end;
 
-procedure TMainForm.ServerChange(Sender: TObject);
-var
-  Section: string;
-  OldStorage: TPerServerStorage;
+procedure TMainForm.ServerChange(Sender: TObject; PrevServer: TServerInfo);
 begin
-  OldStorage := FCurServerStorage;
-  FCurServerStorage := ServersList.Objects[ServersList.ItemIndex] as TPerServerStorage;
-  Section := SServer + IntToStr(ServersList.ItemIndex);
-  Settings.WriteInteger(SServers, SCurrent, ServersList.ItemIndex);
   FRequestTransport.Disconnect;
-  FAria2.RPCSecret := Settings.ReadString(Section, SToken, '');
   TransfersList.Clear;
   ClearStatusBar;
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;
-  FRequestTransport.Connect(Settings.ReadString(Section, SHost, 'localhost'), Settings.ReadInteger(Section, SPort, 6800), Settings.ReadString(Section, SUsername, ''), Settings.ReadString(Section, SPassword, ''), Settings.ReadBool(Section, SUseSSL, false));
-  EventBus.SendEvent(FEvServerChanged, Self, [OldStorage, FCurServerStorage]);
+  with ServersList.Server do
+  begin
+    FAria2.RPCSecret := Token;
+    FRequestTransport.Connect(Host, Port, Username, Password, SSL);
+  end;
+  EventBus.SendEvent(FEvServerChanged, Self, [PrevServer, ServersList.Server]);
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
@@ -779,59 +733,9 @@ begin
   end;
 end;
 
-{ TPerServerStorage }
-
-constructor TPerServerStorage.Create(ServerIndex: Integer);
+function TMainForm.GetServer: TServerInfo;
 begin
-  inherited Create;
-  FSection := SServer + IntToStr(ServerIndex);
-  FTemporary := TStringList.Create;
-end;
-
-destructor TPerServerStorage.Destroy;
-var
-  i: Integer;
-begin
-  for i := 0 to FTemporary.Count - 1 do
-    FTemporary.Objects[i].Free;
-  FreeAndNil(FTemporary);
-  inherited;
-end;
-
-function TPerServerStorage.GetPersistent(const Name: string): string;
-begin
-  if Assigned(Self) then
-    Result := Settings.ReadString(FSection, Name, '')
-  else
-    Result := '';
-end;
-
-function TPerServerStorage.GetTemporary(const Name: string): TObject;
-begin
-  if Assigned(Self) then
-    Result := FTemporary.Objects[FTemporary.IndexOf(Name)]
-  else
-    Result := nil;
-end;
-
-procedure TPerServerStorage.PutPersistent(const Name, Value: string);
-begin
-  if Assigned(Self) then
-    Settings.WriteString(FSection, Name, Value);
-end;
-
-procedure TPerServerStorage.PutTemporary(const Name: string; const Value: TObject);
-begin
-  if not Assigned(Self) then
-  begin
-    Value.Free;
-    Exit;
-  end;
-  if FTemporary.IndexOf(Name) >= 0 then
-    FTemporary.Objects[FTemporary.IndexOf(Name)].Free
-  else
-    FTemporary.Add(Name);
-  FTemporary.Objects[FTemporary.IndexOf(Name)] := Value;
+  Result := ServersList.Server;
 end;
 
 end.

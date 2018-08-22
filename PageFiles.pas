@@ -94,6 +94,7 @@ destructor TPageFiles.Destroy;
 begin
   EventBus.RemoveListeners([LoadSettings, SaveSettings]);
   Finalize(FFilesColumns);
+  FreeMenu(FilesMenu);
   FilesList.SmallImages.Handle := 0;
   FilesList.SmallImages.Free;
   inherited;

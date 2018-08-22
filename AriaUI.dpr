@@ -1,8 +1,8 @@
 program AriaUI;
 
 uses
-  LeakDetect, Windows, AvL, avlOneInstance, Utils, MainForm, OptionsForm, AddForm,
-  ServerOptionsForm, RPCRequestForm;
+  {$IFDEF FASTMM}FastMM4{$ELSE}LeakDetect{$ENDIF}, Windows, AvL, avlOneInstance,
+  Utils, MainForm, OptionsForm, AddForm, ServerOptionsForm, RPCRequestForm;
 
 {$R *.res}
 {$R AriaUIRes.res}
@@ -23,7 +23,7 @@ begin
   Randomize;
   IsMultiThread := true;
   FormMain := TMainForm.Create;
-  LeakMessageEnabled := Settings.ReadBool(SDebug, 'ReportLeaks', false);
+  {$IFNDEF FASTMM}LeakMessageEnabled := Settings.ReadBool(SDebug, 'ReportLeaks', false);{$ENDIF}
   FormOptions := TOptionsForm.Create(FormMain); //TODO: Dialogs must close on Escape
   FormAdd := TAddForm.Create(FormMain);
   FormServerOptions := TServerOptionsForm.Create(FormMain);

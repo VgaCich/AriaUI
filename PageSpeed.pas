@@ -5,8 +5,8 @@ unit PageSpeed;
 interface
 
 uses
-  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, MainForm, InfoPane,
-  Aria2, UpdateThread;
+  Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, Aria2,
+  UpdateThread, MainForm, InfoPane, ServersList;
 
 const
   MaxGraphs = 8;
@@ -100,6 +100,7 @@ end;
 destructor TGraph.Destroy;
 begin
   Finalize(FPoints);
+  FBitmap.Canvas.Font.Free;
   FreeAndNil(FBitmap);
   inherited;
 end;
@@ -330,13 +331,13 @@ procedure TPageSpeed.ServerChanged(Sender: TObject; const Args: array of const);
 var
   Data: TGraphData;
 begin
-  (Args[0].VObject as TPerServerStorage)[SGraphData] := TGraphData.Create(Graph.Backup);
-  Data := (Args[1].VObject as TPerServerStorage)[SGraphData] as TGraphData;
+  (Args[0].VObject as TServerInfo)[SGraphData] := TGraphData.Create(Graph.Backup);
+  Data := (Args[1].VObject as TServerInfo)[SGraphData] as TGraphData;
   if Assigned(Data) then
     Graph.Backup := Data.Backup
   else
     Graph.Clear;
-  (Args[1].VObject as TPerServerStorage)[SGraphData] := nil;
+  (Args[1].VObject as TServerInfo)[SGraphData] := nil;
 end;
 
 procedure TPageSpeed.UpdateGraph(Sender: TObject; const Args: array of const);
