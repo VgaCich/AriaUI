@@ -708,7 +708,7 @@ const
 implementation
 
 uses
-  Utils;
+  Utils; //TODO: Remove Utils dependency
 
 const
   TimeMask = $FFFF;
@@ -1183,7 +1183,7 @@ begin
     Inc(FIDCtr);
     Result := ((GetTime and TimeMask) shl TimeShift) or
               ((Byte(ValueType) and ValueTypeMask) shl ValueTypeShift) or
-              ((FIDCtr and CtrMask) shl CtrShift)or $80000000;
+              ((FIDCtr and CtrMask) shl CtrShift) or $80000000;
     Request := Format(RequestTemplate, [Result, Method]) + AddToken(Params) + ']}';
     if FBatchRequest = '' then
       AddResult(JsonParse(FOnRequest(Self, Request)))

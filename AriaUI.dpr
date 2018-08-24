@@ -22,8 +22,9 @@ begin
   InitCommonControls;
   Randomize;
   IsMultiThread := true;
+  {$IFNDEF FASTMM}LeakMessageEnabled := Settings.ReadBool(SGeneral, 'ReportLeaks', false);{$ENDIF}
+  DefaultFont := Settings.ReadString(SGeneral, 'DefaultFont', DefaultFont);
   FormMain := TMainForm.Create;
-  {$IFNDEF FASTMM}LeakMessageEnabled := Settings.ReadBool(SDebug, 'ReportLeaks', false);{$ENDIF}
   FormOptions := TOptionsForm.Create(FormMain); //TODO: Dialogs must close on Escape
   FormAdd := TAddForm.Create(FormMain);
   FormServerOptions := TServerOptionsForm.Create(FormMain);

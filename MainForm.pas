@@ -85,7 +85,6 @@ const
   AppCaption = 'Aria UI';
   STransport = 'Transport';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
-  SDebug = 'Debug';
   SSplitter = 'Splitter';
 
 implementation
@@ -217,10 +216,10 @@ begin
   FMinHeight := 300;
   FMinWidth := 400;
   Settings.RestoreFormState(ClassName, Self);
-  if Settings.ReadString(SServers, STransport, '') = '' then
+  if Settings.ReadString(SGeneral, STransport, '') = '' then
     FRequestTransport := TWininetRequestTransport.Create
   else try
-    FRequestTransport := TExternalRequestTransport.Create(Settings.ReadString(SServers, STransport, ''));
+    FRequestTransport := TExternalRequestTransport.Create(Settings.ReadString(SGeneral, STransport, ''));
   except
     ShowException;
     FRequestTransport := TWininetRequestTransport.Create;

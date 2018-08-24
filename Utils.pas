@@ -38,6 +38,7 @@ const
   EvLoadSettings = 'Global.LoadSettings'; //No params
   EvSaveSettings = 'Global.SaveSettings'; //No params
   AppName = 'AriaUI';
+  SGeneral = 'General';
   SCount = 'Count';
   SFieldCaption = 'Caption.';
   SFieldWidth = 'Width.';
