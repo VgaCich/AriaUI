@@ -640,10 +640,14 @@ begin
   with FAria2 do
   begin
     Status := GetStruct(TellStatus(GID, [sfStatus])); //TODO: it's slow!
-    if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
-      Result := GetGID(Remove(GID, LongBool(Param))) = GID
-    else
-      Result := GetBool(RemoveDownloadResult(GID));
+    try
+        if TAria2Status(StrToEnum(Status[sfStatus], sfStatusValues)) in [asActive, asWaiting, asPaused] then
+          Result := GetGID(Remove(GID, LongBool(Param))) = GID
+        else
+          Result := GetBool(RemoveDownloadResult(GID));
+    finally
+      Status.Free;
+    end;
   end;
 end;
 
