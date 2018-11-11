@@ -27,7 +27,7 @@ var
 
 function TAria2G.SendRequest(const Method, Params: string): PJsonValue;
 begin
-  Result := GetResult(inherited SendRequest(Method, Params));
+  Result := GetResult(inherited SendRequest(Method, Params, rvtUnknown), rvtUnknown);
 end;
 
 procedure SetOption(const Key, Value: string);
@@ -94,7 +94,7 @@ begin
     ReadLn(Method);
   if Params = '-' then
     ReadLn(Params);
-  RT := TRequestTransport.Create;
+  RT := TWininetRequestTransport.Create;
   A2 := TAria2G.Create(RT.SendRequest, GetOption('t'));
   try
     try
