@@ -163,6 +163,8 @@ begin
     for i := 0 to High(DefColumns) do
       Columns[i] := DefColumns[i];
   end;
+  while List.ColumnCount > 0 do
+    List.ColumnDelete(0);
   for i := 0 to High(Columns) do
     with Columns[i] do
     begin

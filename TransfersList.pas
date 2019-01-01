@@ -108,7 +108,7 @@ begin
         SetFocus;
         Exit;
       end;
-    MessageDlg('Not found', Caption, MB_ICONINFORMATION);
+    MessageDlg('Not found', (Application as TForm).Caption, MB_ICONINFORMATION);
   finally
     Mask.Free;
   end;
