@@ -142,7 +142,7 @@ begin
   Canvas.Brush.Color := clWhite;
   Canvas.FillRect(Rect(0, 0, ClientWidth, 5));
   Canvas.Brush.Color := clBlue;
-  Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Max(1, Length(FPieces)))), 5));
+  Canvas.FillRect(Rect(0, 0, Round(ClientWidth * (Total / Max(1, Length(FPieces)))), 5)); //TODO: draw by real completion percentage?
   Canvas.Pen.Color := clBtnShadow;
   Canvas.MoveTo(0, 5);
   Canvas.LineTo(ClientWidth, 5);
