@@ -406,7 +406,7 @@ begin
         IDServerVersion: ShowServerVersion;
         IDSaveSession: with FAria2 do if GetBool(SaveSession) then ShowMessage('Session saved');
         IDShutdownServer: if Confirm(Ord(IDShutdownServer), 'Shutdown server?') then with FAria2 do CheckResult(Shutdown(GetKeyState(VK_SHIFT) < 0));
-        IDRPCRequest: FormRPCRequest.ShowModal;
+        IDRPCRequest: FormRPCRequest.Show;
         IDAriaWebpage: Execute('http://aria2.github.io');
         IDAriaDocs: Execute('http://aria2.github.io/manual/en/html/index.html');
         IDAbout, IDTrayAbout: ShowAbout;

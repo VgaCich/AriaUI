@@ -71,7 +71,7 @@ var
   i: Integer;
 begin
   inherited Create(AParent, 'RPC Request');
-  BorderStyle := bsDialog; //TODO: resizing
+  BorderStyle := bsToolWindow; //TODO: resizing
   SetSize(400 + Width - ClientWidth, 500 + Height - ClientHeight);
   Position := poScreenCenter;
   LMethod := TLabel.Create(Self, 'Method:');
