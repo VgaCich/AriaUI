@@ -243,19 +243,19 @@ begin
   TrayIcon.OnMouseDown := TrayIconMouseDown;
   TrayIcon.Active := true;
   FAccelTable := CreateAcceleratorTable(Accels[0], Length(Accels));
-  ServersList := TServersList.Create(Self);
-  ServersList.Hint := 'Select server';
-  ServersList.OnChange := ServerChange;
   ToolBar := TToolBar.Create(Self, true);
   ToolBar.Style := ToolBar.Style or TBSTYLE_TOOLTIPS or CCS_TOP;
   ToolBar.ExStyle := ToolBar.ExStyle or TBSTYLE_EX_MIXEDBUTTONS;
   ToolBar.Perform(TB_SETMAXTEXTROWS, 0, 0);
   ToolBar.Perform(TB_AUTOSIZE, 0, 0);
-  Toolbar.Indent := 120;
+  Toolbar.Indent := 150;
   ToolBar.Images := LoadImageList('TBMAIN');
   for i := Low(TBButtons) to High(TBButtons) do
     ToolBar.ButtonAdd(TBButtons[i].Caption, TBButtons[i].ImageIndex);
-  ServersList.SetBounds(ToolBar.Left + 2, ToolBar.Top + (ToolBar.Height - ServersList.Height) div 2, ToolBar.Indent - 4, ServersList.Height);
+  ServersList := TServersList.Create(ToolBar);
+  ServersList.Hint := 'Select server';
+  ServersList.OnChange := ServerChange;
+  ServersList.SetBounds(2, 0, ToolBar.Indent - 4, ToolBar.Height);
   StatusBar := TStatusBar.Create(Self, '');
   StatusBar.SetParts(Length(SBParts), SBParts);
   Splitter := TSplitter.Create(Self, false);
@@ -263,7 +263,7 @@ begin
   Splitter.OnMove := SplitterMove;
   TransfersList := TTransfersList.Create(Self);
   TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
-  TransfersList.OnDblClick := TransferDblClick; //TODO: OnKeyDown and move some hotkays (and add Ctrl-A)
+  TransfersList.OnDblClick := TransferDblClick; //TODO: OnKeyDown and move some hotkeys (and add Ctrl-A)
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
