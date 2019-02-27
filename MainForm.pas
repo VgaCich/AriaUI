@@ -720,7 +720,7 @@ begin
   //TODO: setting "transfer dblclick action"
   if TransfersList.SelectedIndex < 0 then Exit;
   try
-    with FAria2 do
+    with FAria2 do //TODO: not working; fix it
       Status := GetStruct(TellStatus(GetGID(TransfersList.SelectedIndex), [sfDir]));
     try
       Dir := StringReplace(Status[sfDir], '/', '\', [rfReplaceAll]);
