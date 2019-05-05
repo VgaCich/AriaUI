@@ -98,6 +98,30 @@ begin
   WriteLn;
 end;
 
+procedure FilesLayout(Torrent: TBEMap);
+var
+  Info: TBEMap;
+  Files: TBEList;
+  i: Integer;
+  Offset: Int64;
+begin
+  Info := GetInfo(Torrent);
+  if not Assigned(Info) then Exit;
+  Files := Info['files'] as TBEList;
+  Offset := 0;
+  WriteLn('Offset'#9'Size'#9'Name');
+  if Assigned(Files) then
+    for i := 0 to Files.Count - 1 do
+      with Files[i] as TBEMap do
+      begin
+        WriteLn(Offset, ' '#9, BEInt(Items['length']), ' '#9, ToOEM(TorrentGetPath(Items['path'] as TBEList)));
+        Offset := Offset + BEInt(Items['length']);
+      end
+  else
+    WriteLn(Offset, ' '#9, BEInt(Info['length']), ' '#9, ToOEM(BEString(Info['name'])));
+  WriteLn;
+end;
+
 procedure Verify(Torrent: TBEMap; const Dir: string);
 var
   Info: TBEMap;
@@ -162,13 +186,14 @@ var
   Arg: string;
 
 begin
-  WriteLn('TorrentInfo 1.0 (c)Vga, 2017');
+  WriteLn('TorrentInfo 1.1 (c)Vga, 2017-2019');
   WriteLn;
   if ParamCount = 0 then
   begin
     WriteLn('Usage: TorrentInfo <torrent file> [switches]');
     WriteLn('  -l: list files');
     WriteLn('  -d: dump torrent structure');
+    WriteLn('  -f: dump files layout');
     WriteLn('  -v<dir>: verify torrent');
     WriteLn('  -w: wait');
     Exit;
@@ -180,7 +205,20 @@ begin
   end;
   F := TFileStream.Create(ParamStr(1), fmOpenRead);
   try
-    Torrent := BELoadElement(F);
+    try
+      Torrent := BELoadElement(F);
+    except
+      on E:Exception do
+      begin
+        WriteLn('Can''t load torrent file');
+        WriteLn('Exception: ', E.Message);
+        FreeAndNil(Torrent);
+      end;
+    end;
+  finally
+    FreeAndNil(F);
+  end;
+  if Assigned(Torrent) then
     try
       PrintInfo(Torrent as TBEMap);
       for i := 2 to ParamCount do
@@ -195,6 +233,7 @@ begin
           case Arg[2] of
             'd': DumpElement(Torrent);
             'l': ListFiles(Torrent as TBEMap);
+            'f': FilesLayout(Torrent as TBEMap);
             'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
             'w': ReadLn;
             else WriteLn('Unknown switch ' + Arg[2]);
@@ -207,7 +246,4 @@ begin
     finally
       FreeAndNil(Torrent);
     end;
-  finally
-    FreeAndNil(F);
-  end;
 end.
