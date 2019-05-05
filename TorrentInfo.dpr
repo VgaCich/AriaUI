@@ -3,20 +3,16 @@ program TorrentInfo;
 {$APPTYPE CONSOLE}
 
 uses
-  Windows, AvL, avlUtils, BTUtils;
-
-type
-  TFile = record
-    Name: string;
-    Pos: LARGE_INTEGER;
-    Len: Integer;
-  end;
-  TFiles = array of TFile;
+  SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 function ToOEM(const S: string): string;
 begin
-  SetLength(Result, Length(S));
-  CharToOem(PChar(S), PChar(Result));
+  Result := '';
+  if S <> '' then
+  begin
+    SetLength(Result, Length(S));
+    CharToOem(PChar(S), PChar(Result));
+  end;
 end;
 
 function GetInfo(Torrent: TBEMap): TBEMap;
@@ -24,81 +20,6 @@ begin
   Result := Torrent['info'] as TBEMap;
   if not Assigned(Result) then
     WriteLn('Invalid torrent');
-end;
-
-function GetPath(Path: TBEList): string;
-var
-  i: Integer;
-begin
-  Result := '';
-  for i := 0 to Path.Count - 1 do
-    Result := AddTrailingBackslash(Result) + BEString(Path[i]);
-end;
-
-function GetPieceFiles(Info: TBEMap; Piece: Integer): TFiles;
-
-  procedure AddFile(F: TFile);
-  begin
-    SetLength(Result, Length(Result) + 1);
-    Result[High(Result)] := F;
-  end;
-
-var
-  i, PieceSize: Integer;
-  Pos, PiecePos: Int64;
-  F: TFile;
-  Files: TBEList;
-begin
-  PieceSize := BEInt(Info['piece length']);
-  PiecePos := Int64(Piece) * PieceSize;
-  if Assigned(Info['files']) then
-  begin
-    Pos := 0;
-    i := 0;
-    Files := Info['files'] as TBEList;
-    while Pos + BEInt((Files[i] as TBEMap)['length']) < PiecePos do
-    begin
-      Pos := Pos + BEInt((Files[i] as TBEMap)['length']);
-      Inc(i);
-    end;
-    while (PieceSize > 0) and (i < Files.Count) do
-    begin
-      with Files[i] as TBEMap do
-      begin
-        F.Name := GetPath(Items['path'] as TBEList);
-        F.Pos.QuadPart := PiecePos - Pos;
-        F.Len := Min(PieceSize, BEInt(Items['length']) - F.Pos.QuadPart);
-      end;
-      AddFile(F);
-      Pos := PiecePos;
-      Dec(PieceSize, F.Len);
-      Inc(i);
-    end;
-  end
-  else begin
-    F.Name := BEString(Info['name']);
-    F.Pos.QuadPart := PiecePos;
-    F.Len := Min(PieceSize, BEInt(Info['length']) - PiecePos);
-    AddFile(F);
-  end;
-end;
-
-function GetPiece(const Dir: string; const Files: array of TFile; Piece: Integer): TMemoryStream;
-var
-  i: Integer;
-  F: TFileStream;
-begin
-  Result := TMemoryStream.Create;
-  for i := 0 to High(Files) do
-  begin
-    F := TFileStream.Create(AddTrailingBackslash(Dir) + Files[i].Name, fmOpenRead);
-    try
-      SetFilePointer(F.Handle, Files[i].Pos.LowPart, @Files[i].Pos.HighPart, FILE_BEGIN);
-      Result.CopyFrom(F, Files[i].Len);
-    finally
-      FreeAndNil(F);
-    end;
-  end;
 end;
 
 procedure PrintInfo(Torrent: TBEMap);
@@ -171,7 +92,7 @@ begin
   if Assigned(Files) then
     for i := 0 to Files.Count - 1 do
       with Files[i] as TBEMap do
-        WriteLn(SizeToStr(BEInt(Items['length'])), ' '#9, ToOEM(GetPath(Items['path'] as TBEList)))
+        WriteLn(SizeToStr(BEInt(Items['length'])), ' '#9, ToOEM(TorrentGetPath(Items['path'] as TBEList)))
   else
     WriteLn(SizeToStr(BEInt(Info['length'])), ' '#9, ToOEM(BEString(Info['name'])));
   WriteLn;
@@ -180,38 +101,45 @@ end;
 procedure Verify(Torrent: TBEMap; const Dir: string);
 var
   Info: TBEMap;
-  Files: TFiles;
-  Pieces: string;
-  Piece: TMemoryStream;
-  FaultyFiles: TStringList;
+  Pieces: TPieceReader;
+  Files, FaultyFiles: TStringList;
   i, j: Integer;
 begin
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
-  Pieces := (Info['pieces'] as TBEString).Value;
   FaultyFiles := TStringList.Create;
   try
     WriteLn('Verification...');
-    for i := 0 to Length(Pieces) div 20 - 1 do
-    begin
-      Write(#13, Round(100 * (i / (Length(Pieces) div 20))), '%');
-      Files := GetPieceFiles(Info, i);
-      try
-        Piece := GetPiece(Dir, Files, i);
-        try
-          if SHA1(Piece.Memory^, Piece.Size) <> Copy(Pieces, 20 * i + 1, 20) then
-          begin
-            WriteLn(#13'Piece #', i + 1, ' hash failed');
-            for j := 0 to High(Files) do
-              if FaultyFiles.IndexOf(Files[j].Name) < 0 then
-                FaultyFiles.Add(Files[j].Name);
+    Pieces := TPieceReader.Create(Info, Dir);
+    try
+      for i := 0 to Pieces.PieceCount - 1 do
+      begin
+        Write(#13, Round(100 * (i / Pieces.PieceCount)), '%');
+        if SHA1(Pieces[i][1], Pieces.PieceSize) <> Pieces.Hash[i] then
+        begin
+          WriteLn(#13'Piece #', i + 1, ' hash failed');
+          Files := TStringList.Create;
+          try
+            Pieces.GetPieceFiles(i, Files);
+            if Files.Count > 1 then
+              for j := 0 to Files.Count - 1 do
+              begin
+                WriteLn('  ', Files[j]);
+                if FaultyFiles.IndexOf(Files[j]) < 0 then
+                  FaultyFiles.Add(Files[j]);
+              end
+            else if (Files.Count = 1) and (FaultyFiles.IndexOf(Files[0]) < 0) then
+            begin
+              WriteLn('  ', Files[0]);
+              FaultyFiles.Add(Files[0]);
+            end;
+          finally
+            FreeAndNil(Files);
           end;
-        finally
-          FreeAndNil(Piece);
         end;
-      finally
-        Finalize(Files);
       end;
+    finally
+      FreeAndNil(Pieces);
     end;
     WriteLn(#13'Verification completed');
     WriteLn;
@@ -263,12 +191,17 @@ begin
           WriteLn('Unknown argument: ' + Arg);
           Continue;
         end;
-        case Arg[2] of
-          'd': DumpElement(Torrent);
-          'l': ListFiles(Torrent as TBEMap);
-          'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-          'w': ReadLn;
-          else WriteLn('Unknown switch ' + Arg[2]);
+        try
+          case Arg[2] of
+            'd': DumpElement(Torrent);
+            'l': ListFiles(Torrent as TBEMap);
+            'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+            'w': ReadLn;
+            else WriteLn('Unknown switch ' + Arg[2]);
+          end;
+        except
+          on E:Exception do
+            WriteLn(ErrOutput, 'Exception: ', E.Message);
         end;
       end;
     finally
