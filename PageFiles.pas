@@ -2,6 +2,7 @@ unit PageFiles;
 
 //TODO: hotkeys, sorting
 //TODO: external saving of multiple index-out options?
+//TODO: (optionally) display as tree?
 
 interface
 

@@ -359,7 +359,7 @@ end;
 procedure TPieceReader.GetPieceFiles(Index: Integer; Files: TStringList);
 var
   CurFile, Size: Integer;
-  Curpos: Int64;
+  CurPos: Int64;
 begin
   if (Index < 0) or (Index > High(FPieces)) then Exit;
   with FPieces[Index] do
