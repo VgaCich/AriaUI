@@ -1,5 +1,8 @@
 unit AddForm;
 
+//TODO: Configurable "pinned options", path history & pinned paths
+//TODO: "Option presets"
+
 interface
 
 uses

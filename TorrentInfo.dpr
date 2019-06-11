@@ -5,6 +5,9 @@ program TorrentInfo;
 uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
+const
+  AppName = 'TorrentInfo 2.0';
+
 function ToOEM(const S: string): string;
 begin
   Result := '';
@@ -15,11 +18,105 @@ begin
   end;
 end;
 
+function FileSize64(const FileName: WideString): Int64;
+var
+  F: THandle;
+begin
+  F := FileOpenW(FileName, fmOpenRead or fmShareDenyNone);
+  try
+    Result := FileSeek64(F, 0, soFromEnd);
+  finally
+    FileClose(F);
+  end;
+end;
+
+function AddTrailingBackslashW(const Path: WideString): WideString;
+begin
+  Result := Path;
+  if (Length(Result) > 0) and (Result[Length(Result)] <> '\') then
+    Result := Result + '\';
+end;
+
+function FirstDelimiterW(const S: WideString; D: WideChar): Integer;
+begin
+  for Result := 1 to Length(S) do
+    if S[Result] = D then Exit;
+  Result := 0;
+end;
+
+function Now: TDateTime;
+var
+  SystemTime: TSystemTime;
+begin
+  GetSystemTime(SystemTime);
+  SystemTimeToDateTime(SystemTime, Result);
+end;
+
 function GetInfo(Torrent: TBEMap): TBEMap;
 begin
-  Result := Torrent['info'] as TBEMap;
-  if not Assigned(Result) then
-    WriteLn('Invalid torrent');
+  if Assigned(Torrent) then
+  begin
+    Result := Torrent[btfInfo] as TBEMap;
+    if not Assigned(Result) then
+      WriteLn('Invalid torrent');
+  end
+  else
+    Result := nil;
+end;
+
+procedure MakePath(Path: WideString; List: TBEList);
+begin
+  while FirstDelimiterW(Path, '\') > 0 do
+  begin
+    List.Add(TBEString.Create(UTF8Encode(Copy(Path, 1, FirstDelimiterW(Path, '\') - 1))));
+    Delete(Path, 1, FirstDelimiterW(Path, '\'));
+  end;
+  if Length(Path) > 0 then
+    List.Add(TBEString.Create(UTF8Encode(Path)));
+end;
+
+function GetPieceLength(Len: Int64): Integer;
+const
+  MinPiece = 16384;
+  MaxPieces: array[0..10] of Integer = (250, 500, 500, 1000, 1000, 2000, 2000, 2000, 4000, 4000, MaxInt);
+var
+  i: Integer;
+begin
+  Result := MinPiece;
+  for i := 0 to High(MaxPieces) do
+    if Len div Result > MaxPieces[i] then
+      Result := 2 * Result;
+end;
+
+function FindFiles(const BasePath, Path: WideString; Files: TBEList): Int64;
+var
+  F: THandle;
+  FD: TWin32FindDataW;
+  FI: TBEMap;
+  LI: LARGE_INTEGER;
+begin
+  Result := 0;
+  F := FindFirstFileW(PWideChar(AddTrailingBackslashW(BasePath) + AddTrailingBackslashW(Path) + '*.*'), FD);
+  if F = INVALID_HANDLE_VALUE then Exit;
+  try
+    repeat
+      if FD.dwFileAttributes and faDirectory = 0 then
+      begin
+        FI := TBEMap.Create;
+        LI.LowPart := FD.nFileSizeLow;
+        LI.HighPart := FD.nFileSizeHigh;
+        Result := Result + LI.QuadPart;
+        FI[btfLength] := TBEInt.Create(LI.QuadPart);
+        FI[btfPath] := TBEList.Create;
+        MakePath(AddTrailingBackslashW(Path) + WideString(FD.cFileName), FI[btfPath] as TBEList);
+        Files.Add(FI);
+      end
+      else if (WideString(FD.cFileName) <> '.') and (WideString(FD.cFileName) <> '..') then
+        Result := Result + FindFiles(BasePath, AddTrailingBackslashW(Path) + WideString(FD.cFileName), Files);
+    until not FindNextFileW(F, FD);
+  finally
+    Windows.FindClose(F);
+  end;
 end;
 
 procedure PrintInfo(Torrent: TBEMap);
@@ -28,17 +125,129 @@ var
 begin
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
-  WriteLn('Name: ', ToOEM(BEString(Info['name'])));
-  WriteLn('Info hash: ', HexString(TorrentInfoHash(Torrent)));
-  WriteLn('Comment: ', ToOEM(BEString(Torrent['comment'])));
-  WriteLn('Created by: ', ToOEM(BEString(Torrent['created by'])));
-  WriteLn('Creation date: ', ToOEM(DateTimeToStr(UnixToDateTime(BEInt(Torrent['creation date']))) + ' UTC'));
-  WriteLn('Pieces: ', IntToStr(Length((Info['pieces'] as TBEString).Value) div 20) + ' x ' + SizeToStr(BEInt(Info['piece length'])));
-  if Assigned(Info['files']) then
-    WriteLn('Multi-file torrent (', IntToStr((Info['files'] as TBEList).Count), ' files)')
-  else
-    WriteLn('Single-file torrent');
+  try
+    WriteLn('Name: ', ToOEM(BEString(Info[btfName])));
+    WriteLn('Info hash: ', HexString(TorrentInfoHash(Torrent)));
+    WriteLn('Private: ', BEInt(Info[btfPrivate]));
+    WriteLn('Comment: ', ToOEM(BEString(Torrent[btfComment])));
+    WriteLn('Created by: ', ToOEM(BEString(Torrent[btfCreatedBy])));
+    WriteLn('Creation date: ', ToOEM(DateTimeToStr(UnixToDateTime(BEInt(Torrent[btfCreationDate]))) + ' UTC'));
+    WriteLn('Pieces: ', IntToStr(Length((Info[btfPieces] as TBEString).Value) div 20) + ' x ' + SizeToStr(BEInt(Info[btfPieceLength])));
+    if Assigned(Info[btfFiles]) then
+      WriteLn('Multi-file torrent (', IntToStr((Info[btfFiles] as TBEList).Count), ' files)')
+    else
+      WriteLn('Single-file torrent');
+    WriteLn;
+  except
+    on E:Exception do
+      WriteLn(ErrOutput, 'Exception: ', E.Message);
+  end;
+end;
+
+function CreateTorrent(const Path: string): TBEMap;
+
+  procedure ReportFile(Sender: TObject; const FileName: WideString);
+  begin
+    WriteLn('Error reading file "' + ToOEM(FileName) + '"');
+  end;
+
+var
+  Info: TBEMap;
+  PieceReader: TPieceReader;
+  Pieces, Piece, Hash: string;
+  Len: Int64;
+  i, PieceLen: Integer;
+begin
+  Result := nil;
+  if not (FileExists(Path) or DirectoryExists(Path)) then
+  begin
+    WriteLn('Path "' + Path + '" not found');
+    Exit;
+  end;
+  WriteLn('Creating torrent...');
+  Result := TBEMap.Create;
+  Info := TBEMap.Create;
+  Result[btfInfo] := Info;
+  Result[btfCreatedBy] := TBEString.Create(AppName);
+  Result[btfCreationDate] := TBEInt.Create(DateTimeToUnix(Now));
+  Info[btfName] := TBEString.Create(UTF8Encode(ExtractFileName(Path)));
+  if FileExists(Path) then
+  begin
+    Len := FileSize64(Path);
+    Info[btfLength] := TBEInt.Create(Len);
+  end
+  else begin
+    Info[btfFiles] := TBEList.Create;
+    Len := FindFiles(Path, '', Info[btfFiles] as TBEList);
+  end;
+  PieceLen := GetPieceLength(Len);
+  Info[btfPieceLength] := TBEInt.Create(PieceLen);
+  SetLength(Pieces, 20 * ((Len + PieceLen - 1) div PieceLen));
+  ZeroMemory(PChar(Pieces), Length(Pieces));
+  Info[btfPieces] := TBEString.Create(Pieces);
+  UniqueString(Pieces);
+  PieceReader := TPieceReader.Create(Info, ExtractFilePath(Path));
+  try
+    PieceReader.OnFileError := TOnFileError(MakeMethod(@ReportFile));
+    for i := 0 to PieceReader.PieceCount - 1 do
+    begin
+      Write(#13, Round(100 * (i / PieceReader.PieceCount)), '%');
+      Piece := PieceReader[i];
+      Hash := SHA1(Piece[1], Length(Piece));
+      Move(Hash[1], Pieces[20 * i + 1], 20);
+    end;
+    (Info[btfPieces] as TBEString).Value := Pieces;
+  finally
+    PieceReader.Free;
+  end;
+  WriteLn(#13'Completed');
   WriteLn;
+end;
+
+procedure AddTracker(Torrent: TBEMap; const URL: string);
+var
+  L: TBEList;
+begin
+  if not Assigned(Torrent) then Exit;
+  if URL = '' then
+  begin
+    Torrent.Delete(btfAnnounce);
+    Torrent.Delete(btfAnnounceList);
+  end
+  else begin
+    if not Assigned(Torrent[btfAnnounce]) then
+      Torrent[btfAnnounce] := TBEString.Create(UTF8Encode(URL));
+    if not Assigned(Torrent[btfAnnounceList]) then
+      Torrent[btfAnnounceList] := TBEList.Create;
+    L := TBEList.Create;
+    L.Add(TBEString.Create(UTF8Encode(URL)));
+    (Torrent[btfAnnounceList] as TBEList).Add(L);
+  end;
+end;
+
+procedure SetComment(Torrent: TBEMap; const Comment: string);
+begin
+  if not Assigned(Torrent) then Exit;
+  if Comment = '' then
+    Torrent.Delete(btfComment)
+  else if Assigned(Torrent[btfComment]) then
+    (Torrent[btfComment] as TBEString).Value := UTF8Encode(Comment)
+  else
+    Torrent[btfComment] := TBEString.Create(UTF8Encode(Comment));
+end;
+
+procedure SetPrivate(Torrent: TBEMap; const Flag: string);
+var
+  Info: TBEMap;
+begin
+  Info := GetInfo(Torrent);
+  if not Assigned(Info) then Exit;
+  if (Flag = '') or (StrToInt(Flag) = 0) then
+    Info.Delete(btfPrivate)
+  else if Assigned(Info[btfPrivate]) then
+    (Info[btfPrivate] as TBEInt).Value := StrToInt(Flag)
+  else
+    Info[btfPrivate] := TBEInt.Create(StrToInt(Flag));
 end;
 
 procedure DumpElement(Elem: TBEElement; Level: Integer = 0; const Prefix: string = '');
@@ -56,6 +265,7 @@ procedure DumpElement(Elem: TBEElement; Level: Integer = 0; const Prefix: string
 var
   i: Integer;
 begin
+  if not Assigned(Elem) then Exit;
   if Elem is TBEString then
     WriteLn(Indent(Level) + Prefix + (Elem as TBEString).Value)
   else if Elem is TBEInt then
@@ -88,13 +298,13 @@ var
 begin
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
-  Files := Info['files'] as TBEList;
+  Files := Info[btfFiles] as TBEList;
   if Assigned(Files) then
     for i := 0 to Files.Count - 1 do
       with Files[i] as TBEMap do
-        WriteLn(SizeToStr(BEInt(Items['length'])), ' '#9, ToOEM(TorrentGetPath(Items['path'] as TBEList)))
+        WriteLn(SizeToStr(BEInt(Items[btfLength])), ' '#9, ToOEM(TorrentGetPath(Items[btfPath] as TBEList)))
   else
-    WriteLn(SizeToStr(BEInt(Info['length'])), ' '#9, ToOEM(BEString(Info['name'])));
+    WriteLn(SizeToStr(BEInt(Info[btfLength])), ' '#9, ToOEM(BEString(Info[btfName])));
   WriteLn;
 end;
 
@@ -107,24 +317,25 @@ var
 begin
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
-  Files := Info['files'] as TBEList;
+  Files := Info[btfFiles] as TBEList;
   Offset := 0;
   WriteLn('Offset'#9'Size'#9'Name');
   if Assigned(Files) then
     for i := 0 to Files.Count - 1 do
       with Files[i] as TBEMap do
       begin
-        WriteLn(Offset, ' '#9, BEInt(Items['length']), ' '#9, ToOEM(TorrentGetPath(Items['path'] as TBEList)));
-        Offset := Offset + BEInt(Items['length']);
+        WriteLn(Offset, ' '#9, BEInt(Items[btfLength]), ' '#9, ToOEM(TorrentGetPath(Items[btfPath] as TBEList)));
+        Offset := Offset + BEInt(Items[btfLength]);
       end
   else
-    WriteLn(Offset, ' '#9, BEInt(Info['length']), ' '#9, ToOEM(BEString(Info['name'])));
+    WriteLn(Offset, ' '#9, BEInt(Info[btfLength]), ' '#9, ToOEM(BEString(Info[btfName])));
   WriteLn;
 end;
 
 procedure Verify(Torrent: TBEMap; const Dir: string);
 var
   Info: TBEMap;
+  Piece: string;
   Pieces: TPieceReader;
   Files, FaultyFiles: TStringList;
   i, j: Integer;
@@ -139,7 +350,8 @@ begin
       for i := 0 to Pieces.PieceCount - 1 do
       begin
         Write(#13, Round(100 * (i / Pieces.PieceCount)), '%');
-        if SHA1(Pieces[i][1], Pieces.PieceSize) <> Pieces.Hash[i] then
+        Piece := Pieces[i];
+        if SHA1(Piece[1], Length(Piece)) <> Pieces.Hash[i] then
         begin
           WriteLn(#13'Piece #', i + 1, ' hash failed');
           Files := TStringList.Create;
@@ -179,71 +391,107 @@ begin
   end;
 end;
 
+function LoadTorrent(const FileName: string): TBEElement;
 var
-  Torrent: TBEElement;
   F: TFileStream;
-  i: Integer;
-  Arg: string;
-
 begin
-  WriteLn('TorrentInfo 1.1 (c)Vga, 2017-2019');
-  WriteLn;
-  if ParamCount = 0 then
+  Result := nil;
+  if not FileExists(FileName) then
   begin
-    WriteLn('Usage: TorrentInfo <torrent file> [switches]');
-    WriteLn('  -l: list files');
-    WriteLn('  -d: dump torrent structure');
-    WriteLn('  -f: dump files layout');
-    WriteLn('  -v<dir>: verify torrent');
-    WriteLn('  -w: wait');
+    WriteLn('File "' + FileName + '" not found');
     Exit;
   end;
-  if not FileExists(ParamStr(1)) then
-  begin
-    WriteLn('File "' + ParamStr(1) + '" not found');
-    Exit;
-  end;
-  F := TFileStream.Create(ParamStr(1), fmOpenRead);
+  F := TFileStream.Create(FileName, fmOpenRead);
   try
     try
-      Torrent := BELoadElement(F);
+      Result := BELoadElement(F);
     except
       on E:Exception do
       begin
         WriteLn('Can''t load torrent file');
         WriteLn('Exception: ', E.Message);
-        FreeAndNil(Torrent);
+        FreeAndNil(Result);
       end;
     end;
   finally
     FreeAndNil(F);
   end;
-  if Assigned(Torrent) then
-    try
-      PrintInfo(Torrent as TBEMap);
-      for i := 2 to ParamCount do
+end;
+
+procedure SaveTorrent(const FileName: string; Torrent: TBEElement);
+var
+  F: TFileStream;
+begin
+  if not Assigned(Torrent) then
+  begin
+    WriteLn('No torrent loaded');
+    Exit;
+  end;
+  F := TFileStream.Create(FileName, fmCreate or fmOpenWrite);
+  try
+    Torrent.Write(F);
+    WriteLn('Saved');
+  finally
+    F.Free;
+  end;  
+end;
+
+var
+  Torrent: TBEElement;
+  i: Integer;
+  Arg: string;
+
+begin
+  WriteLn(AppName + ' (c)Vga, 2017-2019');
+  WriteLn;
+  if ParamCount = 0 then
+  begin
+    WriteLn('Usage: TorrentInfo <torrent file> [commands]');
+    WriteLn('Commands are processed in order of appearance:');
+    WriteLn('  -a[url]: add tracker (clear list if no [url] given)');
+    WriteLn('  -c<path>: create torrent');
+    WriteLn('  -d: dump torrent structure');
+    WriteLn('  -f: dump files layout');
+    WriteLn('  -l: list files');
+    WriteLn('  -m[text]: set torrent comment');
+    WriteLn('  -p<0|1>: set private flag');
+    WriteLn('  -s: save torrent');
+    WriteLn('  -v<dir>: verify torrent');
+    WriteLn('  -w: wait');
+    Exit;
+  end;
+  if FileExists(ParamStr(1)) then
+    Torrent := LoadTorrent(ParamStr(1));
+  try
+    PrintInfo(Torrent as TBEMap);
+    for i := 2 to ParamCount do
+    begin
+      Arg := ParamStr(i);
+      if (Length(Arg) < 2) or (Arg[1] <> '-') then
       begin
-        Arg := ParamStr(i);
-        if (Length(Arg) < 2) or (Arg[1] <> '-') then
-        begin
-          WriteLn('Unknown argument: ' + Arg);
-          Continue;
-        end;
-        try
-          case Arg[2] of
-            'd': DumpElement(Torrent);
-            'l': ListFiles(Torrent as TBEMap);
-            'f': FilesLayout(Torrent as TBEMap);
-            'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-            'w': ReadLn;
-            else WriteLn('Unknown switch ' + Arg[2]);
-          end;
-        except
-          on E:Exception do
-            WriteLn(ErrOutput, 'Exception: ', E.Message);
-        end;
+        WriteLn('Unknown argument: ' + Arg);
+        Continue;
       end;
-    finally
-      FreeAndNil(Torrent);
+      try
+        case Arg[2] of
+          'a': AddTracker(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'c': Torrent := CreateTorrent(Copy(Arg, 3, MaxInt));
+          'd': DumpElement(Torrent);
+          'f': FilesLayout(Torrent as TBEMap);
+          'l': ListFiles(Torrent as TBEMap);
+          'm': SetComment(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'p': SetPrivate(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          's': SaveTorrent(ParamStr(1), Torrent);
+          'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'w': ReadLn;
+          else WriteLn('Unknown switch ' + Arg[2]);
+        end;
+      except
+        on E:Exception do
+          WriteLn(ErrOutput, 'Exception: ', E.Message);
+      end;
     end;
+  finally
+    FreeAndNil(Torrent);
+  end;
 end.

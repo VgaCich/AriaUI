@@ -6,6 +6,7 @@ unit MainForm;
 //TODO: scroll TransfersList to end
 //TODO: "Minimize to taskbar" option 
 //TODO: Add request to"disabled" if Shift pressed
+//TODO: "No connection" on tray icon
 
 interface
 

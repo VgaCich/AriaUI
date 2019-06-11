@@ -100,7 +100,7 @@ Conditionals=
 DebugSourceDirs=
 UsePackages=0
 [Parameters]
-RunParams=test.torrent -l -vTest -w
+RunParams=test.torrent -w
 HostApplication=
 Launcher=
 UseLauncher=0

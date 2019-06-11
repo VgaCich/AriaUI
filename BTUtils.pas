@@ -69,13 +69,15 @@ type
     FileIdx: Integer;
     Pos: Int64;
   end;
+  TOnFileError = procedure(Sender: TObject; const FileName: WideString) of object;
   TPieceReader = class
   private
-    FBaseDir: WideString; 
+    FBaseDir: WideString;
     FPieceSize, FCurFile: Integer;
     FFile: THandle;
     FFiles: array of TFileRec;
     FPieces: array of TPieceRec;
+    FOnFileError: TOnFileError;
     function NextFile(var CurFile: Integer; var CurPos: Int64; var Size: Integer): Boolean;
     function GetHash(Index: Integer): string;
     function GetPiece(Index: Integer): string;
@@ -88,6 +90,7 @@ type
     property PieceCount: Integer read GetPieceCount;
     property Piece[Index: Integer]: string read GetPiece; default;
     property Hash[Index: Integer]: string read GetHash;
+    property OnFileError: TOnFileError read FOnFileError write FOnFileError;
   end;
 
 function BEString(Elem: TBEElement): WideString;
@@ -98,6 +101,21 @@ function HexString(const S: string): string;
 function SHA1(const Data; Size: Integer): string;
 function TorrentGetPath(FilePath: TBEList): WideString;
 function TorrentInfoHash(Torrent: TBEElement): string;
+
+const
+  btfAnnounce = 'announce';
+  btfAnnounceList = 'announce-list';
+  btfComment = 'comment';
+  btfCreatedBy = 'created by';
+  btfCreationDate = 'creation date';
+  btfFiles = 'files';
+  btfInfo = 'info';
+  btfLength = 'length';
+  btfName = 'name';
+  btfPath = 'path';
+  btfPieces = 'pieces';
+  btfPieceLength = 'piece length';
+  btfPrivate = 'private';
 
 implementation
 
@@ -306,19 +324,20 @@ begin
   FBaseDir := BaseDir;
   if (FBaseDir <> '') and (FBaseDir[Length(FBaseDir)] <> '\') then
     FBaseDir := FBaseDir + '\';
-  FPieceSize := BEInt(Info['piece length']);
-  Hashes := (Info['pieces'] as TBEString).Value;
-  if Assigned(Info['files']) then
+  FPieceSize := BEInt(Info[btfPieceLength]);
+  Hashes := (Info[btfPieces] as TBEString).Value;
+  if Assigned(Info[btfFiles]) then
   begin
-    FilesList := Info['files'] as TBEList;
+    FBaseDir := FBaseDir + BEString(Info[btfName]) + '\';
+    FilesList := Info[btfFiles] as TBEList;
     SetLength(FFiles, FilesList.Count);
     CurPos := 0;
     for i := 0 to FilesList.Count - 1 do
       with FFiles[i] do
       begin
-        Name := TorrentGetPath((FilesList[i] as TBEMap)['path'] as TBEList);
+        Name := TorrentGetPath((FilesList[i] as TBEMap)[btfPath] as TBEList);
         Pos := CurPos;
-        Len := BEInt((FilesList[i] as TBEMap)['length']);
+        Len := BEInt((FilesList[i] as TBEMap)[btfLength]);
         CurPos := CurPos + Len;
       end;
   end
@@ -326,9 +345,9 @@ begin
     SetLength(FFiles, 1);
     with FFiles[0] do
     begin
-      Name := BEString(Info['name']);
+      Name := BEString(Info[btfName]);
       Pos := 0;
-      Len := BEInt(Info['length']);
+      Len := BEInt(Info[btfLength]);
     end;
   end;
   CurFile := 0;
@@ -427,14 +446,19 @@ begin
         FileClose(FFile);
       FFile := FileOpenW(FBaseDir + FFiles[CurFile].Name, fmOpenRead or fmShareDenyNone);
       FCurFile := CurFile;
+      if Assigned(FOnFileError) and (FFile = INVALID_HANDLE_VALUE) then
+        FOnFileError(Self, FFiles[FCurFile].Name);
     end;
     FileSeek64(FFile, CurPos, soFromBeginning);
     Read := Size;
     if Read > FFiles[CurFile].Len - CurPos then
       Read := FFiles[CurFile].Len - CurPos;
-    FileRead(FFile, P^, Read);
-    IncPtr(P, Read);
+    if (FileRead(FFile, P^, Read) <> Read) and Assigned(FOnFileError) then
+      FOnFileError(Self, FFiles[FCurFile].Name);
+    P := IncPtr(P, Read);
   until not NextFile(CurFile, CurPos, Size);
+  if Size > 0 then
+    SetLength(Result, FPieceSize - Size);
 end;
 
 function TPieceReader.GetPieceCount: Integer;
@@ -663,7 +687,7 @@ var
 begin
   Result := '';
   if not (Assigned(Torrent) and (Torrent is TBEMap)) then Exit;
-  Info := (Torrent as TBEMap)['info'];
+  Info := (Torrent as TBEMap)[btfInfo];
   if not Assigned(Info) then Exit;
   Temp := TMemoryStream.Create;
   try
