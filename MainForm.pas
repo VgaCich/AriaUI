@@ -600,7 +600,7 @@ begin
   try
     if Assigned(FUpdateThread.Stats) then
     begin
-      with FUpdateThread do
+      with FUpdateThread do //TODO: Server name in tray tip
         TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
           [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
       if Visible then

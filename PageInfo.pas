@@ -237,7 +237,7 @@ begin
     if lfHighlight in FInfoFields[i].Flags then
       Labels[i].Color := clSilver
     else begin
-      Labels[i].Hint := 'Right click for copy';
+      Labels[i].Hint := 'Right click to copy';
       Labels[i].OnMouseUp := LabelMouseUp;
     end;
     AddStatusKey(FUpdateKeys, FInfoFields[i].Field);
