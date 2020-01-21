@@ -5,8 +5,12 @@ unit MainForm;
 //TODO: Heartbeat indicator
 //TODO: scroll TransfersList to end
 //TODO: "Minimize to taskbar" option 
-//TODO: Add request to"disabled" if Shift pressed
+//TODO: Add request to "disabled dialogs" if Shift pressed
 //TODO: "No connection" on tray icon
+//TODO: Auto-adding URIs from clipboard
+//TODO: Favorite servers on toolbar (or server tabs, maybe?)
+//TODO: restore transfers list selection after servers switching even if list fully refreshed
+//TODO: Transfer Timer - start/pause/remove/etc transfer at set time/interval/etc unconditionally/if still active/etc
 
 interface
 

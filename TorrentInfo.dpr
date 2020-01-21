@@ -6,7 +6,7 @@ uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 const
-  AppName = 'TorrentInfo 2.0';
+  AppName = 'TorrentInfo 2.1';
 
 function ToOEM(const S: string): string;
 begin
@@ -146,7 +146,7 @@ end;
 
 function CreateTorrent(const Path: string): TBEMap;
 
-  procedure ReportFile(Sender: TObject; const FileName: WideString);
+  procedure ReportFile(Self: Pointer; Sender: TObject; const FileName: WideString);
   begin
     WriteLn('Error reading file "' + ToOEM(FileName) + '"');
   end;
@@ -234,6 +234,19 @@ begin
     (Torrent[btfComment] as TBEString).Value := UTF8Encode(Comment)
   else
     Torrent[btfComment] := TBEString.Create(UTF8Encode(Comment));
+end;
+
+procedure SetName(Torrent: TBEMap; const Name: string);
+var
+  Info: TBEMap;
+begin
+  Info := GetInfo(Torrent);
+  if not Assigned(Info) or not Assigned(Info[btfName]) or (Name = '') then
+  begin
+    WriteLn('Invalid torrent or no name given');
+    Exit;
+  end;
+  (Info[btfName] as TBEString).Value := UTF8Encode(Name);
 end;
 
 procedure SetPrivate(Torrent: TBEMap; const Flag: string);
@@ -342,6 +355,12 @@ var
 begin
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
+  i := GetFileAttributesW(PWideChar(WideString(AddTrailingBackslash(Dir)) + BEString(Info[btfName])));
+  if (i = -1) or ((i and FILE_ATTRIBUTE_DIRECTORY <> 0) <> Assigned(Info[btfFiles])) then
+  begin
+    WriteLn('"' + ToOEM(AddTrailingBackslash(Dir) + BEString(Info[btfName])) + '" not found');
+    Exit;
+  end;
   FaultyFiles := TStringList.Create;
   try
     WriteLn('Verification...');
@@ -454,7 +473,8 @@ begin
     WriteLn('  -f: dump files layout');
     WriteLn('  -l: list files');
     WriteLn('  -m[text]: set torrent comment');
-    WriteLn('  -p<0|1>: set private flag');
+    WriteLn('  -n<name>: set torrent name');
+    WriteLn('  -p[0|1]: set private flag');
     WriteLn('  -s: save torrent');
     WriteLn('  -v<dir>: verify torrent');
     WriteLn('  -w: wait');
@@ -480,6 +500,7 @@ begin
           'f': FilesLayout(Torrent as TBEMap);
           'l': ListFiles(Torrent as TBEMap);
           'm': SetComment(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'n': SetName(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
           'p': SetPrivate(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
           's': SaveTorrent(ParamStr(1), Torrent);
           'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
