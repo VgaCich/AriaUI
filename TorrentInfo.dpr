@@ -461,7 +461,7 @@ var
   Arg: string;
 
 begin
-  WriteLn(AppName + ' (c)Vga, 2017-2019');
+  WriteLn(AppName + ' (c)Vga, 2017-2020');
   WriteLn;
   if ParamCount = 0 then
   begin
@@ -505,7 +505,7 @@ begin
           's': SaveTorrent(ParamStr(1), Torrent);
           'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
           'w': ReadLn;
-          else WriteLn('Unknown switch ' + Arg[2]);
+          else WriteLn('Unknown command ' + Arg[2]);
         end;
       except
         on E:Exception do
