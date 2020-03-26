@@ -9,6 +9,7 @@ type
   TUpdateThread = class(TThread)
   private
     FAria2: TAria2;
+    FServerChanged: Boolean;
     FBeforeUpdate, FOnUpdate: TThreadMethod;
   protected
     procedure Execute; override;
@@ -20,6 +21,7 @@ type
     TransferKeys, InfoKeys: TStringArray;
     constructor Create(Aria2: TAria2);
     destructor Destroy; override;
+    procedure ServerChanged;
     property BeforeUpdate: TThreadMethod read FBeforeUpdate write FBeforeUpdate;
     property OnUpdate: TThreadMethod read FOnUpdate write FOnUpdate;
   end;
@@ -31,6 +33,7 @@ implementation
 constructor TUpdateThread.Create(Aria2: TAria2);
 begin
   FAria2 := Aria2;
+  FServerChanged := false;
   Names := TStringList.Create;
   inherited Create(true);
 end;
@@ -40,6 +43,11 @@ begin
   FreeAndNil(Names);
   Finalize(TransferKeys);
   inherited;
+end;
+
+procedure TUpdateThread.ServerChanged;
+begin
+  FServerChanged := true;
 end;
 
 procedure TUpdateThread.Execute;
@@ -79,6 +87,7 @@ begin
   while not Terminated do
   begin
     try
+      FServerChanged := false;
       if Assigned(FBeforeUpdate) then
         Synchronize(FBeforeUpdate);
       with FAria2 do
@@ -107,6 +116,7 @@ begin
             except
               Info := nil;
             end;
+            if FServerChanged then Continue;
             BeginBatch;
             try
               NameIDs.Clear;
@@ -133,9 +143,10 @@ begin
             end;
           end;
         end;
-        if Assigned(FOnUpdate) then
+        if not FServerChanged and Assigned(FOnUpdate) then
           Synchronize(FOnUpdate);
       finally
+        FServerChanged := false;
         FreeAndNil(Stats);
         FreeAndNil(Active);
         FreeAndNil(Waiting);

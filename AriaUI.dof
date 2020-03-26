@@ -107,7 +107,7 @@ UseLauncher=0
 DebugCWD=
 [Version Info]
 IncludeVerInfo=1
-AutoIncBuild=0
+AutoIncBuild=1
 MajorVer=1
 MinorVer=0
 Release=0
@@ -122,9 +122,9 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=VgaSoft
 FileDescription=Aria UI
-FileVersion=1.0.0.0
+FileVersion=1.0.0.5
 InternalName=AriaUI
-LegalCopyright=(c) VgaSoft, 2017
+LegalCopyright=(c) VgaSoft, 2017-2020
 LegalTrademarks=
 OriginalFilename=AriaUI.exe
 ProductName=Aria UI

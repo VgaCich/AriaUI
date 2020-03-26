@@ -11,7 +11,7 @@ type
   private
     FUpdateState: record
       Item: Integer;
-      Selected: TAria2GID;
+      Selected, RestoreSelected: TAria2GID;
     end;
     FColumns: TListColumns;
     FUpdateKeys: TStringArray;
@@ -21,6 +21,7 @@ type
     function GetGID(Index: Integer): TAria2GID;
     procedure LoadSettings(Sender: TObject; const Args: array of const);
     procedure SaveSettings(Sender: TObject; const Args: array of const);
+    procedure ServerChanged(Sender: TObject; const Args: array of const);
   public
     constructor Create(Parent: TWinControl);
     destructor Destroy; override;
@@ -38,7 +39,11 @@ const
 
 implementation
 
+uses
+  ServersList;
+
 const
+  SListState = 'TransfersList.State';
   DefTransferColumns: array[0..10] of TListColumn = (
     (Caption: 'Name'; Width: 200; FType: ftName; Field: ''),
     (Caption: 'Size'; Width: 80; FType: ftSize; Field: sfTotalLength),
@@ -52,6 +57,14 @@ const
     (Caption: 'Conns.'; Width: 50; FType: ftString; Field: sfConnections),
     (Caption: 'Seeds'; Width: 50; FType: ftString; Field: sfNumSeeders));
 
+type
+  TListState = class
+  public
+    Selected: string;
+    constructor Create(const S: string);
+  end;
+
+
 { TTransfersList }
 
 constructor TTransfersList.Create(Parent: TWinControl);
@@ -63,12 +76,13 @@ begin
   SmallImages := LoadImageList('TLICONS');
   EventBus.AddListener(EvLoadSettings, LoadSettings);
   EventBus.AddListener(EvSaveSettings, SaveSettings);
+  EventBus.AddListener(EvServerChanged, ServerChanged);
   OnDestroy := Cleanup;
 end;
 
 destructor TTransfersList.Destroy;
 begin
-  EventBus.RemoveListeners([LoadSettings, SaveSettings]);
+  EventBus.RemoveListeners([LoadSettings, SaveSettings, ServerChanged]);
   Finalize(FColumns);
   Finalize(FUpdateKeys);
   SmallImages.Free;
@@ -133,6 +147,9 @@ begin
     FreeMem(PChar(ItemObject[ItemCount - 1]));
     ItemDelete(ItemCount - 1);
   end;
+  with FUpdateState do
+    if RestoreSelected <> '' then
+      Selected := RestoreSelected;
   if (FUpdateState.Selected <> '') and (SelCount <= 1) and (GID[SelectedIndex] <> FUpdateState.Selected) then
   begin
     ClearSelection;
@@ -142,8 +159,17 @@ begin
         SelectedIndex := i;
         Break;
       end;
-    if SelCount = 0 then
-      SelectedIndex := ItemCount - 1; //TODO: Setting 'where to scroll'
+  end;
+  with FUpdateState do
+    if RestoreSelected <> '' then
+    begin
+      RestoreSelected := '';
+      Perform(LVM_ENSUREVISIBLE, SelectedIndex, 0);
+    end;
+  if SelCount = 0 then
+  begin
+    SelectedIndex := ItemCount - 1; //TODO: Setting 'where to scroll'
+    Perform(LVM_ENSUREVISIBLE, SelectedIndex, 0);
   end;
   inherited;
 end;
@@ -153,7 +179,7 @@ var
   i, j, Image, TopItem, BottomItem: Integer;
   P: PChar;
   S: string;
-  Pt: TPoint;
+  //Pt: TPoint;
 begin
   TopItem := Perform(LVM_GETTOPINDEX, 0, 0);
   BottomItem := TopItem + Perform(LVM_GETCOUNTPERPAGE, 0, 0);
@@ -167,7 +193,7 @@ begin
       ZeroMemory(P, 32);
       ItemObject[FUpdateState.Item] := TObject(P);
     end;
-    Perform(LVM_GETORIGIN, 0, Integer(@Pt));
+    //Perform(LVM_GETORIGIN, 0, Integer(@Pt));
     if GID[FUpdateState.Item] <> List[sfGID] then
       LStrCpy(PChar(ItemObject[FUpdateState.Item]), PChar(List[sfGID]))
     else if (FUpdateState.Item < TopItem) or (FUpdateState.Item > BottomItem) then
@@ -219,6 +245,25 @@ end;
 procedure TTransfersList.SaveSettings(Sender: TObject; const Args: array of const);
 begin
   SaveListColumns(Self, STransferColumns, FColumns, DefTransferColumns);
+end;
+
+procedure TTransfersList.ServerChanged(Sender: TObject; const Args: array of const);
+var
+  State: TListState;
+begin
+  (Args[0].VObject as TServerInfo)[SListState] := TListState.Create(GID[SelectedIndex]);
+  Clear;
+  State := (Args[1].VObject as TServerInfo)[SListState] as TListState;
+  if Assigned(State) then
+    FUpdateState.RestoreSelected := State.Selected;
+  (Args[1].VObject as TServerInfo)[SListState] := nil;
+end;
+
+{ TListState }
+
+constructor TListState.Create(const S: string);
+begin
+  Selected := S;
 end;
 
 end.

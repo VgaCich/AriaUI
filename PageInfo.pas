@@ -236,7 +236,8 @@ begin
       Labels[i].Font.Style := Labels[i].Font.Style + [fsBold];
     if lfHighlight in FInfoFields[i].Flags then
       Labels[i].Color := clSilver
-    else begin
+    else if not ((Labels[i].Caption = '') and (FInfoFields[i].Field = '')) then
+    begin
       Labels[i].Hint := 'Right click to copy';
       Labels[i].OnMouseUp := LabelMouseUp;
     end;

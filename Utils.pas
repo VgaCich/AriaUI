@@ -35,6 +35,8 @@ function DecodeURL(const URL: string): string;
 function LoadImageList(const Name: PChar): TImageList;
 
 const
+  EvServerChanged = 'Global.ServerChanged'; //[PrevServer, CurServer: TServerInfo]
+  EvUpdate = 'Global.Update'; //[UpdateThread: TUpdateThread]
   EvLoadSettings = 'Global.LoadSettings'; //No params
   EvSaveSettings = 'Global.SaveSettings'; //No params
   AppName = 'AriaUI';

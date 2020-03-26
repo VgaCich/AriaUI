@@ -2,6 +2,8 @@ program Aria2RPC;
 
 {$APPTYPE CONSOLE}
 
+//TODO: creates void ini-file
+
 uses AvL, avlUtils, avlJson, Aria2, RequestTransport;
 
 type

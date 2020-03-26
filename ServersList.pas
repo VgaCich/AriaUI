@@ -150,6 +150,7 @@ procedure TServersList.Changed(Sender: TObject);
 var
   PrevServer: TServerInfo;
 begin
+  if FServer = Objects[ItemIndex] then Exit; //TODO: OnChange is called twice for some reason
   PrevServer := FServer;
   FServer := Objects[ItemIndex] as TServerInfo;
   if Assigned(FOnChange) then

@@ -6,7 +6,7 @@ interface
 
 uses
   Windows, Messages, AvL, avlUtils, avlEventBus, avlSettings, Aria2,
-  UpdateThread, MainForm, InfoPane, ServersList;
+  UpdateThread, MainForm, InfoPane;
 
 const
   MaxGraphs = 8;
@@ -54,12 +54,6 @@ type
     property GridQuant: Integer read FGridQuant write FGridQuant;
     property OnGridLabel: TOnGridLabel read FOnGridLabel write FOnGridLabel;
   end;
-  TGraphData = class
-  public
-    Backup: TGraphPoints;
-    constructor Create(Data: TGraphPoints);
-    destructor Destroy; override;
-  end;
   TPageSpeed = class(TInfoPage)
   private
     Graph: TGraph;
@@ -80,10 +74,18 @@ type
 implementation
 
 uses
-  Utils;
+  Utils, ServersList;
 
 const
   SGraphData = 'Speed.GraphData';
+
+type
+  TGraphData = class
+  public
+    Backup: TGraphPoints;
+    constructor Create(Data: TGraphPoints);
+    destructor Destroy; override;
+  end;
 
 { TGraph }
 

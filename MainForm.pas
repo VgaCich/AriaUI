@@ -3,13 +3,11 @@ unit MainForm;
 //TODO: Transfers sorting, filtering & searching
 //TODO: Uncaught exception on InfoPane tab switching (Files->Info) (problems with file icons on large lists)
 //TODO: Heartbeat indicator
-//TODO: scroll TransfersList to end
-//TODO: "Minimize to taskbar" option 
+//TODO: "Minimize to taskbar" option
 //TODO: Add request to "disabled dialogs" if Shift pressed
 //TODO: "No connection" on tray icon
 //TODO: Auto-adding URIs from clipboard
 //TODO: Favorite servers on toolbar (or server tabs, maybe?)
-//TODO: restore transfers list selection after servers switching even if list fully refreshed
 //TODO: Transfer Timer - start/pause/remove/etc transfer at set time/interval/etc unconditionally/if still active/etc
 
 interface
@@ -85,9 +83,6 @@ var
   FormMain: TMainForm;
 
 const
-  //Sender: MainForm
-  EvServerChanged = 'MainForm.ServerChanged'; //[PrevServer, CurServer]
-  EvUpdate = 'MainForm.Update'; //[UpdateThread]
   AppCaption = 'Aria UI';
   STransport = 'Transport';
   SDisabledDialogs = 'DisabledDialogs'; //TODO
@@ -112,7 +107,7 @@ const
   AboutIcon = 'MAINICON';
   AboutCaption = 'About ';
   AboutText = 'Aria UI 1.0 alpha'+CRLF+CRLF+
-              'Copyright '#169' VgaSoft, 2017-2018'+CRLF+
+              'Copyright '#169' VgaSoft, 2017-2020'+CRLF+
               'vgasoft@gmail.com';
   MenuFileCapt = '&File';
   MenuFile: array[0..6] of PChar = ('1001',
@@ -673,7 +668,7 @@ end;
 procedure TMainForm.ServerChange(Sender: TObject; PrevServer: TServerInfo);
 begin
   FRequestTransport.Disconnect;
-  TransfersList.Clear;
+  FUpdateThread.ServerChanged;
   ClearStatusBar;
   StatusBar.SetPartText(Ord(sbConnection), 0, 'Connecting...');
   TrayIcon.ToolTip := Caption;

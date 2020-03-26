@@ -3,6 +3,7 @@ unit OptionsList;
 //TODO: Options description
 //TODO: Go to webdocs on F1 in options list (or embedded help?)
 //TODO: Save values history?
+//TODO: Better handling of overlay combobox
 
 interface
 
@@ -20,11 +21,13 @@ type
     Value: TComboBox;
     procedure AdjustColumns;
     function GetOptionName(Item: Integer): string;
-    //procedure Resize(Sender: TObject);
     procedure ValueKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ValueChange(Sender: TObject);
     procedure AdjustValue;
+    procedure SetValue(const Value: string);
     procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
     procedure WMUser(var Msg: TMessage); message WM_USER;
+    procedure WMSetFocus(var Msg: TWMSetFocus); message WM_SETFOCUS;
     property State[Item: Integer]: TOptionState read GetOptionState write SetOptionState;
   public
     constructor Create(AParent: TWinControl);
@@ -64,6 +67,8 @@ end;
 { TOptionsList }
 
 constructor TOptionsList.Create(AParent: TWinControl);
+var
+  CBInfo: TComboBoxInfo;
 begin
   inherited Create(AParent);
   Style := Style or LVS_SINGLESEL or LVS_SHOWSELALWAYS or LVS_NOSORTHEADER or LVS_SORTASCENDING;
@@ -76,9 +81,13 @@ begin
   SetWindowLong(Handle, GWL_USERDATA, SetWindowLong(Handle, GWL_WNDPROC, Longint(@MsgHookProc)));
   if GetWindowLong(ParentHandle, GWL_WNDPROC) <> Integer(@ParentHookProc) then //TODO: Check other hooks too!
     PrevWndProc := Pointer(SetWindowLong(ParentHandle, GWL_WNDPROC, Longint(@ParentHookProc)));
-  Value := TComboBox.Create(Self, csDropDown); //TODO: apply on selecting value from drop-down list
+  Value := TComboBox.Create(Self, csDropDown);
+  CBInfo.cbSize := SizeOf(CBInfo);
+  GetComboBoxInfo(Value.Handle, CBInfo);
+  Value.Tag := Integer(CBInfo.hwndItem);
   Value.Visible := false;
   Value.OnKeyUp := ValueKeyUp;
+  Value.OnChange := ValueChange;
   SetWindowLong(GetWindow(Value.Handle, GW_CHILD), GWL_USERDATA,
     SetWindowLong(GetWindow(Value.Handle, GW_CHILD), GWL_WNDPROC, Longint(@EditHookProc)));
 end;
@@ -134,7 +143,7 @@ begin
   inherited;
   if PNMHdr(Msg.NMHdr).hwndFrom = Handle then
     if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
-      with PNMListView(Msg.NMHdr)^ do //TODO: Set focus to edit
+      with PNMListView(Msg.NMHdr)^ do
       begin
         OptInfo := '';
         for i := 0 to High(Aria2Options) do
@@ -148,12 +157,19 @@ begin
           Value.ItemAdd(Tok(OSep, OptInfo));
         Value.Text := Items[iItem, 1];
         AdjustValue;
+        Value.SetFocus;
       end;
 end;
 
 procedure TOptionsList.WMUser(var Msg: TMessage);
 begin
   AdjustValue;
+end;
+
+procedure TOptionsList.WMSetFocus(var Msg: TWMSetFocus);
+begin
+  if ((Msg.FocusedWnd = Value.Handle) or (Msg.FocusedWnd = THandle(Value.Tag))) and Value.Visible then
+    Value.SetFocus;
 end;
 
 function TOptionsList.GetChangedOptions: TAria2OptionArray;
@@ -181,21 +197,16 @@ begin
 end;
 
 procedure TOptionsList.ValueKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
-var
-  Item: Integer;
 begin
   if Key = VK_RETURN then
-  begin
-    Item := SelectedIndex;
-    if Item >= 0 then
-    begin
-      Items[Item, 0] := '*' + GetOptionName(Item);
-      Items[Item, 1] := Value.Text;
-      State[Item] := State[Item] + [osChanged];
-    end;
-  end
+    SetValue(Value.Text)
   else if Key = VK_ESCAPE then
     Value.Text := Items[SelectedIndex, 1];
+end;
+
+procedure TOptionsList.ValueChange(Sender: TObject);
+begin
+  SetValue(Value.Items[Value.ItemIndex]);
 end;
 
 function TOptionsList.GetOptionState(Item: Integer): TOptionState;
@@ -206,6 +217,19 @@ end;
 procedure TOptionsList.SetOptionState(Item: Integer; const Value: TOptionState);
 begin
   ItemObject[Item] := TObject(Byte(Value));
+end;
+
+procedure TOptionsList.SetValue(const Value: string);
+var
+  Item: Integer;
+begin
+  Item := SelectedIndex;
+  if Item >= 0 then
+  begin
+    Items[Item, 0] := '*' + GetOptionName(Item);
+    Items[Item, 1] := Value;
+    State[Item] := State[Item] + [osChanged];
+  end;
 end;
 
 end.
