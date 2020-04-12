@@ -1,6 +1,7 @@
 unit PageSpeed;
 
 //TODO: Customization (GridQuant, Colors, etc)
+//TODO: Dynamic GridQuant (1/2..10/20..128/256..512, k-M-G)
 
 interface
 

@@ -9,6 +9,7 @@ unit MainForm;
 //TODO: Auto-adding URIs from clipboard
 //TODO: Favorite servers on toolbar (or server tabs, maybe?)
 //TODO: Transfer Timer - start/pause/remove/etc transfer at set time/interval/etc unconditionally/if still active/etc
+//TODO: Scroll control under mouse, not focused
 
 interface
 
@@ -678,6 +679,7 @@ begin
     FRequestTransport.Connect(Host, Port, Username, Password, SSL);
   end;
   EventBus.SendEvent(FEvServerChanged, Self, [PrevServer, ServersList.Server]);
+  TransfersList.SetFocus;
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
