@@ -75,7 +75,7 @@ type
 implementation
 
 uses
-  Utils, ServersList;
+  Utils;
 
 const
   SGraphData = 'Speed.GraphData';

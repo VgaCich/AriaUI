@@ -1,5 +1,8 @@
 unit RPCRequestForm;
 
+//TODO: Multirequests for GIDs selected in TL (pack to batch)
+//TODO: Word selection by dblclick and/or more convenient params editor
+
 interface
 
 uses

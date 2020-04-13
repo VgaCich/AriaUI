@@ -10,6 +10,8 @@ unit MainForm;
 //TODO: Favorite servers on toolbar (or server tabs, maybe?)
 //TODO: Transfer Timer - start/pause/remove/etc transfer at set time/interval/etc unconditionally/if still active/etc
 //TODO: Scroll control under mouse, not focused
+//TODO: Gather selected GIDs before processing and merge requests to batch
+//TODO: Move up/down submenus to select move distance
 
 interface
 

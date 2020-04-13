@@ -39,9 +39,6 @@ const
 
 implementation
 
-uses
-  ServersList;
-
 const
   SListState = 'TransfersList.State';
   DefTransferColumns: array[0..10] of TListColumn = (

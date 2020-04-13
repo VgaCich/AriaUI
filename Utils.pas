@@ -16,6 +16,28 @@ type
   end;
   TListColumns = array of TListColumn;
   TListColumnCallback = procedure(const Column: TListColumn) of object;
+  TServerInfo = class
+  private
+    FSection, FHost, FUsername, FPassword, FToken: string;
+    FPort: Word;
+    FSSL: Boolean;
+    FTemporary: TStringList;
+    function GetPersistent(const Name: string): string;
+    function GetTemporary(const Name: string): TObject;
+    procedure PutPersistent(const Name, Value: string);
+    procedure PutTemporary(const Name: string; const Value: TObject);
+  public
+    constructor Create(ServerIndex: Integer);
+    destructor Destroy; override;
+    property Host: string read FHost;
+    property Port: Word read FPort;
+    property Username: string read FUsername;
+    property Password: string read FPassword;
+    property Token: string read FToken;
+    property SSL: Boolean read FSSL;
+    property Persistent[const Name: string]: string read GetPersistent write PutPersistent;
+    property Temporary[const Name: string]: TObject read GetTemporary write PutTemporary; default;
+  end;
 
 procedure InsertMenu(Menu, SubMenu: TMenu; const Name: string; ID: Cardinal);
 procedure FreeMenu(Menu: TMenu);
@@ -47,6 +69,13 @@ const
   SFieldType = 'Type.';
   SFieldField = 'Field.';
   SFieldFlags = 'Flags.';
+  SServer = 'Server.';
+  SHost = 'Host';
+  SPort = 'Port';
+  SUsername = 'Username';
+  SPassword = 'Password';
+  SToken = 'Token';
+  SUseSSL = 'UseSSL';
   BasicTransferKeys: array[0..6] of string = (sfGID, sfBittorrent, sfStatus, sfErrorMessage, sfSeeder, sfVerifyPending, sfVerifiedLength);
 
 var
@@ -262,6 +291,67 @@ function LoadImageList(const Name: PChar): TImageList;
 begin
   Result := TImageList.Create;
   Result.AddMasked(LoadImage(hInstance, Name, IMAGE_BITMAP, 0, 0, 0), clFuchsia);
+end;
+
+{ TServerInfo }
+
+constructor TServerInfo.Create(ServerIndex: Integer);
+begin
+  inherited Create;
+  FSection := SServer + IntToStr(ServerIndex);
+  FHost := Settings.ReadString(FSection, SHost, 'localhost');
+  FPort := Settings.ReadInteger(FSection, SPort, 6800);
+  FUsername := Settings.ReadString(FSection, SUsername, '');
+  FPassword := Settings.ReadString(FSection, SPassword, '');
+  FToken := Settings.ReadString(FSection, SToken, '');
+  FSSL := Settings.ReadBool(FSection, SUseSSL, false);
+  FTemporary := TStringList.Create;
+end;
+
+destructor TServerInfo.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to FTemporary.Count - 1 do
+    FTemporary.Objects[i].Free;
+  FreeAndNil(FTemporary);
+  inherited;
+end;
+
+function TServerInfo.GetPersistent(const Name: string): string;
+begin
+  if Assigned(Self) then
+    Result := Settings.ReadString(FSection, Name, '')
+  else
+    Result := '';
+end;
+
+function TServerInfo.GetTemporary(const Name: string): TObject;
+begin
+  if Assigned(Self) then
+    Result := FTemporary.Objects[FTemporary.IndexOf(Name)]
+  else
+    Result := nil;
+end;
+
+procedure TServerInfo.PutPersistent(const Name, Value: string);
+begin
+  if Assigned(Self) then
+    Settings.WriteString(FSection, Name, Value);
+end;
+
+procedure TServerInfo.PutTemporary(const Name: string; const Value: TObject);
+begin
+  if not Assigned(Self) then
+  begin
+    Value.Free;
+    Exit;
+  end;
+  if FTemporary.IndexOf(Name) >= 0 then
+    FTemporary.Objects[FTemporary.IndexOf(Name)].Free
+  else
+    FTemporary.Add(Name);
+  FTemporary.Objects[FTemporary.IndexOf(Name)] := Value;
 end;
 
 initialization
