@@ -12,6 +12,8 @@ unit MainForm;
 //TODO: Scroll control under mouse, not focused
 //TODO: Gather selected GIDs before processing and merge requests to batch
 //TODO: Move up/down submenus to select move distance
+//TODO: Followed/Following navigation
+//TODO: Perform full refresh sometimes (ex. after restoration from tray)
 
 interface
 

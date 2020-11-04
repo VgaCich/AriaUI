@@ -6,7 +6,13 @@ uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 const
-  AppName = 'TorrentInfo 2.1';
+  AppName = 'TorrentInfo 2.2';
+
+type
+  TExitCodes = (ecUnknownArgument, ecUnknownCommand, ecException, ecCreateTorrent,
+    ecAddTracker, ecSetComment, ecSetName, ecSetPrivate, ecDumpElement, ecListFiles,
+    ecFilesLayout, ecVerify, ecSaveTorrent, ecNone = 31);
+  TExitCode = set of TExitCodes;
 
 function ToOEM(const S: string): string;
 begin
@@ -204,10 +210,11 @@ begin
   WriteLn;
 end;
 
-procedure AddTracker(Torrent: TBEMap; const URL: string);
+function AddTracker(Torrent: TBEMap; const URL: string): TExitCode;
 var
   L: TBEList;
 begin
+  Result := [ecAddTracker];
   if not Assigned(Torrent) then Exit;
   if URL = '' then
   begin
@@ -223,10 +230,12 @@ begin
     L.Add(TBEString.Create(UTF8Encode(URL)));
     (Torrent[btfAnnounceList] as TBEList).Add(L);
   end;
+  Result := [];
 end;
 
-procedure SetComment(Torrent: TBEMap; const Comment: string);
+function SetComment(Torrent: TBEMap; const Comment: string): TExitCode;
 begin
+  Result := [ecSetComment];
   if not Assigned(Torrent) then Exit;
   if Comment = '' then
     Torrent.Delete(btfComment)
@@ -234,12 +243,14 @@ begin
     (Torrent[btfComment] as TBEString).Value := UTF8Encode(Comment)
   else
     Torrent[btfComment] := TBEString.Create(UTF8Encode(Comment));
+  Result := [];
 end;
 
-procedure SetName(Torrent: TBEMap; const Name: string);
+function SetName(Torrent: TBEMap; const Name: string): TExitCode;
 var
   Info: TBEMap;
 begin
+  Result := [ecSetName];
   Info := GetInfo(Torrent);
   if not Assigned(Info) or not Assigned(Info[btfName]) or (Name = '') then
   begin
@@ -247,12 +258,14 @@ begin
     Exit;
   end;
   (Info[btfName] as TBEString).Value := UTF8Encode(Name);
+  Result := [];
 end;
 
-procedure SetPrivate(Torrent: TBEMap; const Flag: string);
+function SetPrivate(Torrent: TBEMap; const Flag: string): TExitCode;
 var
   Info: TBEMap;
 begin
+  Result := [ecSetPrivate];
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
   if (Flag = '') or (StrToInt(Flag) = 0) then
@@ -261,9 +274,10 @@ begin
     (Info[btfPrivate] as TBEInt).Value := StrToInt(Flag)
   else
     Info[btfPrivate] := TBEInt.Create(StrToInt(Flag));
+  Result := [];
 end;
 
-procedure DumpElement(Elem: TBEElement; Level: Integer = 0; const Prefix: string = '');
+function DumpElement(Elem: TBEElement; Level: Integer = 0; const Prefix: string = ''): TExitCode;
 
   function Indent(Level: Integer): string;
   begin
@@ -278,7 +292,9 @@ procedure DumpElement(Elem: TBEElement; Level: Integer = 0; const Prefix: string
 var
   i: Integer;
 begin
+  Result := [ecDumpElement];
   if not Assigned(Elem) then Exit;
+  Result := [];
   if Elem is TBEString then
     WriteLn(Indent(Level) + Prefix + (Elem as TBEString).Value)
   else if Elem is TBEInt then
@@ -288,27 +304,30 @@ begin
     WriteLn(Indent(Level) + Prefix + 'List:');
     with Elem as TBEList do
       for i := 0 to Count - 1 do
-        DumpElement(Items[i], Level + 1);
+        Result := Result + DumpElement(Items[i], Level + 1);
   end
   else if Elem is TBEMap then
   begin
     WriteLn(Indent(Level) + Prefix + 'Map:');
     with Elem as TBEMap do
       for i := 0 to Count - 1 do
-        DumpElement(Items[Names[i]], Level + 1, Names[i] + ': ');
+        Result := Result + DumpElement(Items[Names[i]], Level + 1, Names[i] + ': ');
   end
-  else
+  else begin
     WriteLn(Indent(Level) + Prefix + 'Invalid element');
+    Result := [ecDumpElement];
+  end;
   if Level = 0 then
     WriteLn;
 end;
 
-procedure ListFiles(Torrent: TBEMap);
+function ListFiles(Torrent: TBEMap): TExitCode;
 var
   Info: TBEMap;
   Files: TBEList;
   i: Integer;
 begin
+  Result := [ecListFiles];
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
   Files := Info[btfFiles] as TBEList;
@@ -319,15 +338,17 @@ begin
   else
     WriteLn(SizeToStr(BEInt(Info[btfLength])), ' '#9, ToOEM(BEString(Info[btfName])));
   WriteLn;
+  Result := [];
 end;
 
-procedure FilesLayout(Torrent: TBEMap);
+function FilesLayout(Torrent: TBEMap): TExitCode;
 var
   Info: TBEMap;
   Files: TBEList;
   i: Integer;
   Offset: Int64;
 begin
+  Result := [ecFilesLayout];
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
   Files := Info[btfFiles] as TBEList;
@@ -343,9 +364,10 @@ begin
   else
     WriteLn(Offset, ' '#9, BEInt(Info[btfLength]), ' '#9, ToOEM(BEString(Info[btfName])));
   WriteLn;
+  Result := [];
 end;
 
-procedure Verify(Torrent: TBEMap; const Dir: string);
+function Verify(Torrent: TBEMap; const Dir: string): TExitCode;
 var
   Info: TBEMap;
   Piece: string;
@@ -353,6 +375,7 @@ var
   Files, FaultyFiles: TStringList;
   i, j: Integer;
 begin
+  Result := [ecVerify];
   Info := GetInfo(Torrent);
   if not Assigned(Info) then Exit;
   i := GetFileAttributesW(PWideChar(WideString(AddTrailingBackslash(Dir)) + BEString(Info[btfName])));
@@ -399,8 +422,9 @@ begin
     WriteLn(#13'Verification completed');
     WriteLn;
   finally
-    if FaultyFiles.Count > 0 then
-    begin
+    if FaultyFiles.Count = 0 then
+      Result := []
+    else begin
       WriteLn('Verification failed. Affected files:');
       for i := 0 to FaultyFiles.Count - 1 do
         WriteLn(ToOEM(FaultyFiles[i]));
@@ -437,10 +461,11 @@ begin
   end;
 end;
 
-procedure SaveTorrent(const FileName: string; Torrent: TBEElement);
+function SaveTorrent(const FileName: string; Torrent: TBEElement): TExitCode;
 var
   F: TFileStream;
 begin
+  Result := [ecSaveTorrent];
   if not Assigned(Torrent) then
   begin
     WriteLn('No torrent loaded');
@@ -450,17 +475,20 @@ begin
   try
     Torrent.Write(F);
     WriteLn('Saved');
+    Result := [];
   finally
     F.Free;
-  end;  
+  end;
 end;
 
 var
   Torrent: TBEElement;
   i: Integer;
   Arg: string;
+  ExitCode: TExitCode absolute System.ExitCode;
 
 begin
+  ExitCode := [];
   WriteLn(AppName + ' (c)Vga, 2017-2020');
   WriteLn;
   if ParamCount = 0 then
@@ -490,26 +518,37 @@ begin
       if (Length(Arg) < 2) or (Arg[1] <> '-') then
       begin
         WriteLn('Unknown argument: ' + Arg);
+        ExitCode := ExitCode + [ecUnknownArgument];
         Continue;
       end;
       try
         case Arg[2] of
-          'a': AddTracker(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-          'c': Torrent := CreateTorrent(Copy(Arg, 3, MaxInt));
-          'd': DumpElement(Torrent);
-          'f': FilesLayout(Torrent as TBEMap);
-          'l': ListFiles(Torrent as TBEMap);
-          'm': SetComment(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-          'n': SetName(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-          'p': SetPrivate(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
-          's': SaveTorrent(ParamStr(1), Torrent);
-          'v': Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'a': ExitCode := ExitCode + AddTracker(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'c': begin
+            Torrent := CreateTorrent(Copy(Arg, 3, MaxInt));
+            if not Assigned(Torrent) then
+              ExitCode := ExitCode + [ecCreateTorrent];
+          end;
+          'd': ExitCode := ExitCode + DumpElement(Torrent);
+          'f': ExitCode := ExitCode + FilesLayout(Torrent as TBEMap);
+          'l': ExitCode := ExitCode + ListFiles(Torrent as TBEMap);
+          'm': ExitCode := ExitCode + SetComment(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'n': ExitCode := ExitCode + SetName(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          'p': ExitCode := ExitCode + SetPrivate(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
+          's': ExitCode := ExitCode + SaveTorrent(ParamStr(1), Torrent);
+          'v': ExitCode := ExitCode + Verify(Torrent as TBEMap, Copy(Arg, 3, MaxInt));
           'w': ReadLn;
-          else WriteLn('Unknown command ' + Arg[2]);
+          else begin
+            WriteLn('Unknown command ' + Arg[2]);
+            ExitCode := ExitCode + [ecUnknownCommand];
+          end;
         end;
       except
         on E:Exception do
+        begin
           WriteLn(ErrOutput, 'Exception: ', E.Message);
+          ExitCode := ExitCode + [ecException];
+        end;
       end;
     end;
   finally
