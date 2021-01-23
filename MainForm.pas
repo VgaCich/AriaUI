@@ -480,6 +480,7 @@ end;
 
 procedure TMainForm.AddMetalink(Sender: TObject);
 begin
+  //TODO: Check for file existence
   try
     with FAria2 do
       CheckResult(AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options));
@@ -490,6 +491,7 @@ end;
 
 procedure TMainForm.AddTorrent(Sender: TObject);
 begin
+  //TODO: Check for file existence
   try
     with FAria2 do
       CheckResult(AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options));

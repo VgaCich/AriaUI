@@ -1,6 +1,7 @@
 unit Aria2;
 
 //TODO: option groups (input/global/cli/etc)
+//TODO: Check parameters, especially in AddTorrent/AddMetalink
 
 interface
 
