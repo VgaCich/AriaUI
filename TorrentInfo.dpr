@@ -6,7 +6,7 @@ uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 const
-  AppName = 'TorrentInfo 2.2';
+  AppName = 'TorrentInfo 2.3';
 
 type
   TExitCodes = (ecUnknownArgument, ecUnknownCommand, ecException, ecCreateTorrent,
@@ -373,7 +373,22 @@ var
   Piece: string;
   Pieces: TPieceReader;
   Files, FaultyFiles: TStringList;
-  i, j: Integer;
+  i, j, Idx: Integer;
+
+  function FilePieces(const Name: string): Integer;
+  var
+    i: Integer;
+  begin
+    for i := 0 to Pieces.FilesCount - 1 do
+      if string(Pieces.Files[i].Name) = Name then
+      begin
+        with Pieces.Files[i] do
+          Result := (Pos + Len) div Pieces.PieceSize - Pos div Pieces.PieceSize + 1; 
+        Exit;
+      end;
+    Result := 0;
+  end;
+
 begin
   Result := [ecVerify];
   Info := GetInfo(Torrent);
@@ -388,49 +403,47 @@ begin
   try
     WriteLn('Verification...');
     Pieces := TPieceReader.Create(Info, Dir);
-    try
-      for i := 0 to Pieces.PieceCount - 1 do
+    for i := 0 to Pieces.PieceCount - 1 do
+    begin
+      Write(#13, Round(100 * (i / Pieces.PieceCount)), '%');
+      Piece := Pieces[i];
+      if SHA1(Piece[1], Length(Piece)) <> Pieces.Hash[i] then
       begin
-        Write(#13, Round(100 * (i / Pieces.PieceCount)), '%');
-        Piece := Pieces[i];
-        if SHA1(Piece[1], Length(Piece)) <> Pieces.Hash[i] then
-        begin
-          WriteLn(#13'Piece #', i + 1, ' hash failed');
-          Files := TStringList.Create;
-          try
-            Pieces.GetPieceFiles(i, Files);
-            if Files.Count > 1 then
-              for j := 0 to Files.Count - 1 do
-              begin
-                WriteLn('  ', Files[j]);
-                if FaultyFiles.IndexOf(Files[j]) < 0 then
-                  FaultyFiles.Add(Files[j]);
-              end
-            else if (Files.Count = 1) and (FaultyFiles.IndexOf(Files[0]) < 0) then
-            begin
-              WriteLn('  ', Files[0]);
-              FaultyFiles.Add(Files[0]);
-            end;
-          finally
-            FreeAndNil(Files);
-          end;
+        WriteLn(#13'Piece #', i + 1, ' hash failed');
+        Files := TStringList.Create;
+        try
+          Pieces.GetPieceFiles(i, Files);
+          for j := 0 to Files.Count - 1 do
+          begin
+            Idx := FaultyFiles.IndexOf(Files[j]);
+            if (Idx < 0) or (Files.Count > 1) then
+               WriteLn('  ', Files[j]);
+            if Idx < 0 then
+              FaultyFiles.AddObject(Files[j], TObject(0))
+            else
+              FaultyFiles.Objects[Idx] := TObject(Integer(FaultyFiles.Objects[Idx]) + 1);
+          end
+        finally
+          FreeAndNil(Files);
         end;
       end;
-    finally
-      FreeAndNil(Pieces);
     end;
     WriteLn(#13'Verification completed');
     WriteLn;
   finally
-    if FaultyFiles.Count = 0 then
-      Result := []
-    else begin
-      WriteLn('Verification failed. Affected files:');
-      for i := 0 to FaultyFiles.Count - 1 do
-        WriteLn(ToOEM(FaultyFiles[i]));
-      WriteLn;
+    try
+      if FaultyFiles.Count = 0 then
+        Result := []
+      else begin
+        WriteLn('Verification failed. Affected files:');
+        for i := 0 to FaultyFiles.Count - 1 do
+          WriteLn(Format('[%d/%d] '#9'%s', [Integer(FaultyFiles.Objects[i]) + 1, FilePieces(FaultyFiles[i]), ToOEM(FaultyFiles[i])]));
+        WriteLn;
+      end;
+    finally
+      FreeAndNil(FaultyFiles);
+      FreeAndNil(Pieces);
     end;
-    FreeAndNil(FaultyFiles);
   end;
 end;
 
@@ -489,7 +502,7 @@ var
 
 begin
   ExitCode := [];
-  WriteLn(AppName + ' (c)Vga, 2017-2020');
+  WriteLn(AppName + ' (c)Vga, 2017-2021');
   WriteLn;
   if ParamCount = 0 then
   begin

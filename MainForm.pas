@@ -402,7 +402,7 @@ begin
         IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
         IDMoveUp: ProcessSelected(Ord(IDMoveUp), MoveTransfer, [], -1);
-        IDResumeAll, IDTrayResumeAll: with FAria2 do CheckResult(UnpauseAll);
+        IDResumeAll, IDTrayResumeAll: with FAria2 do CheckResult(UnpauseAll); //TODO: Set/clear pause-metadata option?
         IDPauseAll, IDTrayPauseAll: with FAria2 do CheckResult(PauseAll(GetKeyState(VK_SHIFT) < 0));
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then with FAria2 do CheckResult(PurgeDownloadResult);
         IDTrayPurge: with FAria2 do CheckResult(PurgeDownloadResult);

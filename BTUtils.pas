@@ -79,6 +79,8 @@ type
     FPieces: array of TPieceRec;
     FOnFileError: TOnFileError;
     function NextFile(var CurFile: Integer; var CurPos: Int64; var Size: Integer): Boolean;
+    function GetFilesCount: Integer;
+    function GetFile(Index: Integer): TFileRec;
     function GetHash(Index: Integer): string;
     function GetPiece(Index: Integer): string;
     function GetPieceCount: Integer;
@@ -86,6 +88,8 @@ type
     constructor Create(Info: TBEMap; const BaseDir: WideString);
     destructor Destroy; override;
     procedure GetPieceFiles(Index: Integer; Files: TStringList);
+    property FilesCount: Integer read GetFilesCount;
+    property Files[Index: Integer]: TFileRec read GetFile;
     property PieceSize: Integer read FPieceSize;
     property PieceCount: Integer read GetPieceCount;
     property Piece[Index: Integer]: string read GetPiece; default;
@@ -413,6 +417,19 @@ begin
     Inc(CurFile);
     Result := false
   end;
+end;
+
+function TPieceReader.GetFile(Index: Integer): TFileRec;
+begin
+  if (Index >= 0) and (Index < Length(FFiles)) then
+    Result := FFiles[Index]
+  else
+    ZeroMemory(@Result, SizeOf(Result));
+end;
+
+function TPieceReader.GetFilesCount: Integer;
+begin
+  Result := Length(FFiles);
 end;
 
 function TPieceReader.GetHash(Index: Integer): string;
