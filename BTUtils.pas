@@ -8,9 +8,12 @@ uses
 type
   TBEElement = class
   protected
+    FPos, FLen: Int64;
     function WriteStr(Stream: TStream; const Str: string): Integer;
   public
     procedure Write(Stream: TStream); virtual; abstract;
+    property Len: Int64 read FLen;
+    property Pos: Int64 read FPos;
   end;
   TBEString = class(TBEElement)
   private
@@ -98,26 +101,33 @@ type
   end;
 
 function BEString(Elem: TBEElement): WideString;
+function BERawString(Elem: TBEElement): string;
 function BEInt(Elem: TBEElement): Int64;
 function BEItem(Elem: TBEElement; Path: string): TBEElement;
 function BELoadElement(Stream: TStream): TBEElement;
 function HexString(const S: string): string;
 function SHA1(const Data; Size: Integer): string;
 function TorrentGetPath(FilePath: TBEList): WideString;
-function TorrentInfoHash(Torrent: TBEElement): string;
+function TorrentInfoHash(Torrent: TBEElement): string; overload;
+function TorrentInfoHash(Stream: TStream): string; overload;
 
 const
   btfAnnounce = 'announce';
   btfAnnounceList = 'announce-list';
+  btfAttr = 'attr';
   btfComment = 'comment';
   btfCreatedBy = 'created by';
   btfCreationDate = 'creation date';
   btfFiles = 'files';
+  btfFileTree = 'file tree';
   btfInfo = 'info';
   btfLength = 'length';
   btfName = 'name';
+  btfMetaVersion = 'meta version';
   btfPath = 'path';
   btfPieces = 'pieces';
+  btfPiecesRoot = 'pieces root';
+  btfPieceLayers = 'piece layers';
   btfPieceLength = 'piece length';
   btfPrivate = 'private';
 
@@ -495,6 +505,14 @@ begin
     Result := Int64ToStr(TBEInt(Elem).Value);
 end;
 
+function BERawString(Elem: TBEElement): string;
+begin
+  Result := '';
+  if not Assigned(Elem) then Exit;
+  if Elem is TBEString then
+    Result := TBEString(Elem).Value;
+end;
+
 function BEInt(Elem: TBEElement): Int64;
 begin
   if Assigned(Elem) and (Elem is TBEInt) then
@@ -535,11 +553,13 @@ var
   Len: Integer;
   Element: TBEElement;
   Key: TBEString;
+  Pos: Int64;
 begin
   Result := nil;
+  Pos := Stream.Position;
   Stream.Read(C, 1);
   case C of
-    '1'..'9':
+    '0'..'9':
       begin
         Len := StrToInt(C + ReadUntil(':'));
         if Len > Stream.Size - Stream.Position then Exit;
@@ -564,15 +584,24 @@ begin
         while true do
         begin
           TBEElement(Key) := BELoadElement(Stream);
-          if not (Assigned(Key) and (Key is TBEString)) then Break;
-          Element := BELoadElement(Stream);
-          if not Assigned(Element) then Break;
-          (Result as TBEMap).Items[Key.Value] := Element;
+          try
+            if not (Assigned(Key) and (Key is TBEString)) then Break;
+            Element := BELoadElement(Stream);
+            if not Assigned(Element) then Break;
+            (Result as TBEMap).Items[Key.Value] := Element;
+          finally
+            FreeAndNil(Key);
+          end;
         end;
       end;
     'e': ;
   else
     Stream.Seek(-1, soFromCurrent);
+  end;
+  if Assigned(Result) then
+  begin
+    Result.FPos := Pos;
+    Result.FLen := Stream.Position - Pos;
   end;
 end;
 
@@ -712,6 +741,29 @@ begin
     Result := SHA1(Temp.Memory^, Temp.Size);
   finally
     FreeAndNil(Temp);
+  end;
+end;
+
+function TorrentInfoHash(Stream: TStream): string;
+var
+  Torrent: TBEElement;
+  Temp: string;
+begin
+  Result := '';
+  if not Assigned(Stream) then Exit;
+  Torrent := BELoadElement(Stream);
+  try
+    if not Assigned(Torrent) or not (Torrent is TBEMap) or
+       not Assigned(TBEMap(Torrent)[btfInfo]) then Exit;
+    with TBEMap(Torrent)[btfInfo] do
+    begin
+      SetLength(Temp, Len);
+      Stream.Position := Pos;
+      Stream.Read(Temp[1], Len);
+      Result := SHA1(Temp[1], Len);
+    end
+  finally
+    FreeAndNil(Torrent);
   end;
 end;
 

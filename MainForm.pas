@@ -13,7 +13,8 @@ unit MainForm;
 //TODO: Gather selected GIDs before processing and merge requests to batch
 //TODO: Move up/down submenus to select move distance
 //TODO: Followed/Following navigation
-//TODO: Perform full refresh sometimes (ex. after restoration from tray)
+//TODO: Perform full refresh sometimes (ex. after restoration from tray) (or keep received data?)
+//TODO: Replace Servers combo-list with tabs
 
 interface
 

@@ -6,7 +6,7 @@ uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 const
-  AppName = 'TorrentInfo 2.3';
+  AppName = 'TorrentInfo 2.4';
 
 type
   TExitCodes = (ecUnknownArgument, ecUnknownCommand, ecException, ecCreateTorrent,
@@ -81,6 +81,16 @@ begin
     List.Add(TBEString.Create(UTF8Encode(Path)));
 end;
 
+function GetMetaVersion(Info: TBEMap): Integer;
+begin
+  Result := 0;
+  if not Assigned(Info) then Exit;
+  if Assigned(Info[btfMetaVersion]) then
+    Result := BEInt(Info[btfMetaVersion])
+  else
+    Result := 1;
+end;
+
 function GetPieceLength(Len: Int64): Integer;
 const
   MinPiece = 16384;
@@ -134,15 +144,21 @@ begin
   try
     WriteLn('Name: ', ToOEM(BEString(Info[btfName])));
     WriteLn('Info hash: ', HexString(TorrentInfoHash(Torrent)));
+    WriteLn('Version: ', GetMetaVersion(Info));
     WriteLn('Private: ', BEInt(Info[btfPrivate]));
     WriteLn('Comment: ', ToOEM(BEString(Torrent[btfComment])));
     WriteLn('Created by: ', ToOEM(BEString(Torrent[btfCreatedBy])));
     WriteLn('Creation date: ', ToOEM(DateTimeToStr(UnixToDateTime(BEInt(Torrent[btfCreationDate]))) + ' UTC'));
-    WriteLn('Pieces: ', IntToStr(Length((Info[btfPieces] as TBEString).Value) div 20) + ' x ' + SizeToStr(BEInt(Info[btfPieceLength])));
-    if Assigned(Info[btfFiles]) then
-      WriteLn('Multi-file torrent (', IntToStr((Info[btfFiles] as TBEList).Count), ' files)')
-    else
-      WriteLn('Single-file torrent');
+    if Assigned(Info[btfPieces]) then
+    begin
+      WriteLn('Pieces: ', IntToStr(Length(BERawString(Info[btfPieces])) div 20) + ' x ' + SizeToStr(BEInt(Info[btfPieceLength])));
+      if Assigned(Info[btfFiles]) then
+        WriteLn('Multi-file torrent (', IntToStr((Info[btfFiles] as TBEList).Count), ' files)')
+      else
+        WriteLn('Single-file torrent');
+    end;
+    if GetMetaVersion(Info) > 1 then
+      WriteLn('Non-v1 torrents are not fully supported');
     WriteLn;
   except
     on E:Exception do
@@ -502,7 +518,7 @@ var
 
 begin
   ExitCode := [];
-  WriteLn(AppName + ' (c)Vga, 2017-2021');
+  WriteLn(AppName + ' (c)Vga, 2017-2022');
   WriteLn;
   if ParamCount = 0 then
   begin

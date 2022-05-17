@@ -708,9 +708,6 @@ const
 
 implementation
 
-uses
-  Utils; //TODO: Remove Utils dependency
-
 const
   TimeMask = $FFFF;
   TimeShift = 0;
@@ -718,6 +715,30 @@ const
   ValueTypeShift = 16;
   CtrMask = $FFF;
   CtrShift = 19;
+
+function StrToEnum(const S: string; const Values: array of string): Integer;
+begin
+  for Result := Low(Values) to High(Values) do
+    if Values[Result] = S then
+      Exit;
+  Result := 0;
+end;
+
+function Select(Exp: Boolean; const STrue, SFalse: string): string;
+begin
+  if Exp then
+    Result := STrue
+  else
+    Result := SFalse;
+end;
+
+function Check(Exp: Boolean; const STrue: string): string;
+begin
+  if Exp then
+    Result := STrue
+  else
+    Result := '';
+end;
 
 function Escape(C: Char): string;
 const
