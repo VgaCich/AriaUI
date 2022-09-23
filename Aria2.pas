@@ -851,18 +851,21 @@ end;
 
 function TAria2.AddUri(const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
+  if Length(Uris) = 0 then raise Exception.Create('Aria2: invalid parameter');
   Result := SendRequest('aria2.addUri', MakeParams(['', '{}', ''],
     [ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtGID);
 end;
 
 function TAria2.AddTorrent(const Torrent: string; const Uris: array of string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
+  if Torrent = '' then raise Exception.Create('Aria2: invalid parameter');
   Result := SendRequest('aria2.addTorrent', MakeParams(['', '[]', '{}', ''],
     ['"' + Base64Encode(Torrent) + '"', ArrayToJson(Uris), OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtGID);
 end;
 
 function TAria2.AddMetalink(const Metalink: string; const Options: array of TAria2Option; Position: Integer = -1): TRequestID;
 begin
+  if Metalink = '' then raise Exception.Create('Aria2: invalid parameter');
   Result := SendRequest('aria2.addMetalink', MakeParams(['', '{}', ''],
     ['"' + Base64Encode(Metalink) + '"', OptionsToJson(Options), Check(Position >= 0, IntToStr(Position))]), rvtStruct);
 end;

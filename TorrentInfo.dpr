@@ -2,6 +2,8 @@ program TorrentInfo;
 
 {$APPTYPE CONSOLE}
 
+//TODO: Multithread creation/verification
+
 uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
@@ -433,7 +435,7 @@ begin
           begin
             Idx := FaultyFiles.IndexOf(Files[j]);
             if (Idx < 0) or (Files.Count > 1) then
-               WriteLn('  ', Files[j]);
+               WriteLn('  ', Files[j]); //TODO: Convert to OEM encoding
             if Idx < 0 then
               FaultyFiles.AddObject(Files[j], TObject(0))
             else

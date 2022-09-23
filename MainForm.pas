@@ -5,16 +5,16 @@ unit MainForm;
 //TODO: Heartbeat indicator
 //TODO: "Minimize to taskbar" option
 //TODO: Add request to "disabled dialogs" if Shift pressed
-//TODO: "No connection" on tray icon
 //TODO: Auto-adding URIs from clipboard
-//TODO: Favorite servers on toolbar (or server tabs, maybe?)
+//TODO: Redesign server tabs? Fav servers?
 //TODO: Transfer Timer - start/pause/remove/etc transfer at set time/interval/etc unconditionally/if still active/etc
 //TODO: Scroll control under mouse, not focused
 //TODO: Gather selected GIDs before processing and merge requests to batch
 //TODO: Move up/down submenus to select move distance
 //TODO: Followed/Following navigation
 //TODO: Perform full refresh sometimes (ex. after restoration from tray) (or keep received data?)
-//TODO: Replace Servers combo-list with tabs
+//TODO: "Copy magnet link" option
+//TODO: Tray tips on transfers state change
 
 interface
 
@@ -49,6 +49,7 @@ type
     procedure ClearStatusBar;
     function Confirm(ID: Integer; const Message: string): Boolean;
     procedure ExitProgram;
+    procedure ExportTransfersList;
     function FormClose(Sender: TObject): Boolean;
     procedure FormDestroy(Sender: TObject);
     function FormMinimize(Sender: TObject): Boolean;
@@ -67,11 +68,12 @@ type
     procedure ShowAbout;
     procedure ShowServerVersion;
     procedure SplitterMove(Sender: TObject);
+    procedure TransferChange(Sender: TObject);
     procedure TransferDblClick(Sender: TObject);
     function TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
+    procedure TransfersResize(Sender: TObject);
     procedure UpdateKeys;
     procedure WMCommand(var Msg: TWMCommand); message WM_COMMAND;
-    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
     //procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;
     procedure WMSizing(var Msg: TWMMoving); message WM_SIZING;
     procedure WMContextMenu(var Msg: TWMContextMenu); message WM_CONTEXTMENU;
@@ -103,7 +105,7 @@ type
   TTBButtons = (tbAddURL, tbAddTorrent, tbAddMetalink, tbResume, tbPause, tbRemove, tbMoveUp, tbMoveDown, tbOptions, tbExit);
   TSBPart = (sbConnection, sbDownSpeed, sbUpSpeed, sbStats);
   TMenuID = (IDMenuFile = 1000, IDAddURL, IDAddTorrent, IDAddMetalink, IDOptions, IDFileSep0, IDExit,
-             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge, IDTransferSep2, IDFind, IDFindNext,
+             IDMenuTransfers = 2000, IDResume, IDPause, IDRemove, IDProperties, IDCheckIntegrity, IDTransfersSep0, IDMoveUp, IDMoveDown, IDTransfersSep1, IDResumeAll, IDPauseAll, IDPurge, IDExportList, IDTransferSep2, IDFind, IDFindNext,
              IDMenuServer = 3000, IDServerOptions, IDServerVersion, IDSaveSession, IDShutdownServer, IDRPCRequest,
              IDMenuHelp = 5000, IDAriaWebpage, IDAriaDocs, IDHelpSep0, IDAbout,
              IDMenuTray = 10000, IDTrayShow, IDTraySep0, IDTrayResumeAll, IDTrayPauseAll, IDTrayPurge, IDTraySep1, IDTrayOptions, IDTrayAbout, IDTraySep2, IDTrayExit);
@@ -113,7 +115,7 @@ const
   AboutIcon = 'MAINICON';
   AboutCaption = 'About ';
   AboutText = 'Aria UI 1.0 alpha'+CRLF+CRLF+
-              'Copyright '#169' VgaSoft, 2017-2020'+CRLF+
+              'Copyright '#169' VgaSoft, 2017-2022'+CRLF+
               'vgasoft@gmail.com';
   MenuFileCapt = '&File';
   MenuFile: array[0..6] of PChar = ('1001',
@@ -124,7 +126,7 @@ const
     '-',
     'E&xit'#9'Alt-X');
   MenuTransfersCapt = '&Transfers';
-  MenuTransfers: array[0..15] of PChar = ('2001',
+  MenuTransfers: array[0..16] of PChar = ('2001',
     '&Resume'#9'Ctrl-R', //TODO: restarting of failed transfers
     '&Pause'#9'Ctrl-P',
     'R&emove'#9'Del',
@@ -134,9 +136,10 @@ const
     'Move &up'#9'Ctrl-Up',
     'Move &down'#9'Ctrl-Down',
     '-',
-    'Res&ume all',
+    'Resu&me all',
     'Pau&se all',
     'Purge &completed'#9'F4',
+    'E&xport list...',
     '-',
     '&Find...'#9'Ctrl-F',
     'Find &next'#9'F3');
@@ -255,28 +258,27 @@ begin
   ToolBar.ExStyle := ToolBar.ExStyle or TBSTYLE_EX_MIXEDBUTTONS;
   ToolBar.Perform(TB_SETMAXTEXTROWS, 0, 0);
   ToolBar.Perform(TB_AUTOSIZE, 0, 0);
-  Toolbar.Indent := 150;
   ToolBar.Images := LoadImageList('TBMAIN');
   for i := Low(TBButtons) to High(TBButtons) do
     ToolBar.ButtonAdd(TBButtons[i].Caption, TBButtons[i].ImageIndex);
-  ServersList := TServersList.Create(ToolBar);
-  ServersList.Hint := 'Select server';
-  ServersList.OnChange := ServerChange;
-  ServersList.SetBounds(2, 0, ToolBar.Indent - 4, ToolBar.Height);
   StatusBar := TStatusBar.Create(Self, '');
   StatusBar.SetParts(Length(SBParts), SBParts);
   Splitter := TSplitter.Create(Self, false);
   Splitter.SetBounds(0, Settings.ReadInteger(ClassName, SSplitter, 300), ClientWidth, Splitter.Height);
   Splitter.OnMove := SplitterMove;
-  TransfersList := TTransfersList.Create(Self);
-  TransfersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
+  ServersList := TServersList.Create(Self);
+  ServersList.OnChange := ServerChange;
+  ServersList.SetBounds(0, ToolBar.Height, ClientWidth, Splitter.Top - ToolBar.Height);
+  TransfersList := TTransfersList.Create(ServersList);
+  TransfersList.OnChange := TransferChange;
   TransfersList.OnDblClick := TransferDblClick; //TODO: OnKeyDown and move some hotkeys (and add Ctrl-A)
+  ServersList.OnResize := TransfersResize;
   Info := TInfoPane.Create(Self);
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
   OnResize := FormResize;
-  FormResize(Self);
   LoadSettings;
+  FormResize(Self);
   FUpdateThread.Resume;
 end;
 
@@ -379,7 +381,7 @@ end;
 
 procedure TMainForm.SplitterMove(Sender: TObject);
 begin
-  TransfersList.SetBounds(Splitter.Left, ToolBar.Height, Splitter.Width, Splitter.Top - ToolBar.Height);
+  ServersList.SetBounds(Splitter.Left, ToolBar.Height, Splitter.Width, Splitter.Top - ToolBar.Height);
   Info.SetBounds(Splitter.Left, Splitter.Bottom, Splitter.Width, StatusBar.Top - Splitter.Bottom);
 end;
 
@@ -398,7 +400,7 @@ begin
         IDAddMetalink: FormAdd.Show('Add Metalink', 'Metalink files|*.metalink;*.meta4|All files|*.*', true, AddMetalink);
         IDResume: ProcessSelected(Ord(IDResume), ResumeTransfer, []);
         IDPause: ProcessSelected(Ord(IDPause), PauseTransfer, [], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
-        IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0)));
+        IDRemove: ProcessSelected(Ord(IDRemove), RemoveTransfer, ['Remove transfer "%s"?', 'Remove %d selected transfers?'], Integer(LongBool(GetKeyState(VK_SHIFT) < 0))); //TODO: clear selection?
         IDProperties: TransferProperties(TransfersList.GID[TransfersList.SelectedIndex], 0);
         IDCheckIntegrity: ProcessSelected(Ord(IDCheckIntegrity), CheckIntegrity, [], 0);
         IDMoveDown: ProcessSelected(Ord(IDMoveDown), MoveTransfer, [], 1);
@@ -406,6 +408,7 @@ begin
         IDResumeAll, IDTrayResumeAll: with FAria2 do CheckResult(UnpauseAll); //TODO: Set/clear pause-metadata option?
         IDPauseAll, IDTrayPauseAll: with FAria2 do CheckResult(PauseAll(GetKeyState(VK_SHIFT) < 0));
         IDPurge: if Confirm(Ord(IDPurge), 'Purge completed & removed transfers?') then with FAria2 do CheckResult(PurgeDownloadResult);
+        IDExportList: ExportTransfersList;
         IDTrayPurge: with FAria2 do CheckResult(PurgeDownloadResult);
         IDFind: if InputQuery(Handle, 'Find transfer', 'Search mask:', S) then TransfersList.Find(S);
         IDFindNext: TransfersList.Find('');
@@ -442,6 +445,7 @@ procedure TMainForm.FormResize(Sender: TObject);
 begin
   ToolBar.Perform(TB_AUTOSIZE, 0, 0);
   StatusBar.Perform(WM_SIZE, 0, 0);
+  //ServersList.Width := ToolBar.ClientWidth - ServersList.Left;
   if (ClientWidth <= 0) or (ClientHeight <= 0) then Exit;
   Splitter.Width := ClientWidth;
   Splitter.Top := StatusBar.Top - Info.Height - Splitter.Height;
@@ -481,7 +485,6 @@ end;
 
 procedure TMainForm.AddMetalink(Sender: TObject);
 begin
-  //TODO: Check for file existence
   try
     with FAria2 do
       CheckResult(AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options));
@@ -492,7 +495,6 @@ end;
 
 procedure TMainForm.AddTorrent(Sender: TObject);
 begin
-  //TODO: Check for file existence
   try
     with FAria2 do
       CheckResult(AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options));
@@ -538,6 +540,23 @@ begin
   TrayIcon.ToolTip := Caption + CRLF + 'Exiting...';
   if Visible then Hide;
   Close;
+end;
+
+procedure TMainForm.ExportTransfersList;
+var
+  FN: string;
+begin
+  if not OpenSaveDialog(Handle, false, '', 'csv', 'Comma-separated values|*.csv|Text Report|*.txt|HTML Report|*.htm,*.html|JSON Dump|*.json|All files|*.*',
+    '', 0, OFN_PATHMUSTEXIST or OFN_OVERWRITEPROMPT, FN) then Exit;
+  if SameText(ExtractFileExt(FN), '.txt') then
+    //ExportTransfersText(FN)
+  else if SameText(ExtractFileExt(FN), '.htm') or SameText(ExtractFileExt(FN), '.html') then
+    //ExportTransfersHTML(FN)
+  else if SameText(ExtractFileExt(FN), '.json') then
+    //ExportTransfersJSON(FN)
+  else
+    //ExportTransfersCSV(FN);
+    ;
 end;
 
 function TMainForm.FormClose(Sender: TObject): Boolean;
@@ -587,8 +606,9 @@ end;
 procedure TMainForm.ProcessSelected(ID: Integer; Handler: TTransferHandler; const Messages: array of string; Param: Integer = 0);
 var
   i: Integer;
+  GIDs: TStringList;
 begin
-  if TransfersList.SelCount = 0 then Exit //TODO: collect gids before, clear selection after (anly when deleting, maybe?)
+  if TransfersList.SelCount = 0 then Exit
   else if TransfersList.SelCount = 1 then
   begin
     if (Length(Messages) > 0) and not Confirm(ID, Format(Messages[0], [TransfersList.SelectedCaption])) then Exit;
@@ -596,8 +616,15 @@ begin
   end
   else begin
     if (Length(Messages) > 1) and not Confirm(ID, Format(Messages[1], [TransfersList.SelCount])) then Exit;
-    for i := 0 to TransfersList.SelCount - 1 do
-      Handler(TransfersList.GID[TransfersList.Selected[i]], Param);
+    GIDs := TStringList.Create;
+    try
+      for i := 0 to TransfersList.SelCount - 1 do
+        GIDs.Add(TransfersList.GID[TransfersList.Selected[i]]);
+      for i := 0 to GIDs.Count - 1 do
+        Handler(GIDs[i], Param);
+    finally
+      FreeAndNil(GIDs);
+    end;
   end;
 end;
 
@@ -607,9 +634,9 @@ begin
   try
     if Assigned(FUpdateThread.Stats) then
     begin
-      with FUpdateThread do //TODO: Server name in tray tip
-        TrayIcon.ToolTip := Format('%s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
-          [Caption, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
+      with FUpdateThread do
+        TrayIcon.ToolTip := Format('%s: %s' + CRLF + 'Active: %d; Waiting: %d; Stopped: %d' + CRLF + 'Down: %s/s; Up: %s/s',
+          [Caption, Server.Name, Stats.Int[sfNumActive], Stats.Int[sfNumWaiting], Stats.Int[sfNumStopped], SizeToStr(Stats.Int[sfDownloadSpeed]), SizeToStr(Stats.Int[sfUploadSpeed])]);
       if Visible then
       try //TODO: Request details only for visible items
         StatusBar.SetPartText(Ord(sbConnection), 0, 'OK');
@@ -635,7 +662,7 @@ begin
     begin
       ClearStatusBar;
       StatusBar.SetPartText(Ord(sbConnection), 0, 'No connection');
-      TrayIcon.ToolTip := Caption + CRLF + 'No connection';
+      TrayIcon.ToolTip := Caption + ': ' + Server.Name + CRLF + 'No connection';
     end;
     EventBus.SendEvent(FEvUpdate, Self, [FUpdateThread]);
   except
@@ -686,7 +713,7 @@ begin
     FRequestTransport.Connect(Host, Port, Username, Password, SSL);
   end;
   EventBus.SendEvent(FEvServerChanged, Self, [PrevServer, ServersList.Server]);
-  TransfersList.SetFocus;
+  //TransfersList.SetFocus;
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;
@@ -714,12 +741,9 @@ begin
     TransfersMenu.Popup(Msg.XPos, Msg.YPos);
 end;
 
-procedure TMainForm.WMNotify(var Msg: TWMNotify);
+procedure TMainForm.TransferChange(Sender: TObject);
 begin
-  inherited;
-  if Assigned(TransfersList) and (PNMHdr(Msg.NMHdr).hwndFrom = TransfersList.Handle) then
-    if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
-      Info.GID := TransfersList.GID[PNMListView(Msg.NMHdr).iItem];
+  Info.GID := TransfersList.GID[TransfersList.SelectedIndex];
 end;
 
 procedure TMainForm.TransferDblClick(Sender: TObject);
@@ -744,6 +768,12 @@ begin
   except
     on E: Exception do ShowException;
   end;
+end;
+
+procedure TMainForm.TransfersResize(Sender: TObject);
+begin
+  with ServersList.ClientRect do
+    TransfersList.SetBounds(Left, Top, Right - Left, Bottom - Top);
 end;
 
 function TMainForm.GetServer: TServerInfo;

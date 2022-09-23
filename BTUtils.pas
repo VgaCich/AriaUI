@@ -614,6 +614,7 @@ begin
     Result := Result + IntToHex(Ord(S[i]), 2);
 end;
 
+//TODO: Optimize by unrolling cycle?
 function SHA1(const Data; Size: Integer): string;
 const
   hlen = 20;

@@ -23,8 +23,7 @@ type
     property GID: TAria2GID read FGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
   end;
-  TInfoPane = class(TSimplePanel)
-    Tabs: TTabControl;
+  TInfoPane = class(TTabControl)
     Pages: array of TInfoPage;
   private
     FCurPage: TInfoPage;
@@ -34,8 +33,7 @@ type
     procedure SetGID(const Value: TAria2GID);
     procedure LoadSettings(Sender: TObject; const Args: array of const);
     procedure SaveSettings(Sender: TObject; const Args: array of const);
-    procedure SetPage(Page: Integer);
-    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
+    procedure SetPage(Sender: TObject);
   public
     constructor Create(AParent: TWinControl);
     procedure Update(UpdateThread: TUpdateThread);
@@ -61,24 +59,21 @@ constructor TInfoPane.Create(AParent: TWinControl);
 var
   Page: Integer;
 begin
-  inherited Create(AParent, '');
-  Border := 2;
-  ExStyle := 0;
-  Tabs := TTabControl.Create(Self);
-  Tabs.Style := tsTabs;
-  Tabs.SetPosition(0, 0);
+  inherited Create(AParent);
+  Style := tsTabs;
   SetLength(Pages, Length(InfoPages));
   for Page := Low(InfoPages) to High(InfoPages) do
   begin
     Pages[Page] := InfoPages[Page].Create(Self);
     Pages[Page].BringToFront;
     Pages[Page].Visible := false;
-    Tabs.TabAdd(Pages[Page].Name);
+    TabAdd(Pages[Page].Name);
   end;
   FCurPage := Pages[0];
   FCurPage.Visible := true;
-  Tabs.TabIndex := 0;
+  TabIndex := 0;
   OnResize := Resize;
+  OnChange := SetPage;
   EventBus.AddListener(EvLoadSettings, LoadSettings);
   EventBus.AddListener(EvSaveSettings, SaveSettings);
 end;
@@ -95,28 +90,22 @@ end;
 
 procedure TInfoPane.LoadSettings(Sender: TObject; const Args: array of const);
 begin
-  Tabs.TabIndex := Settings.ReadInteger(Sender.ClassName, SInfoPage, 0);
-  SetPage(Tabs.TabIndex);
+  TabIndex := Settings.ReadInteger(Sender.ClassName, SInfoPage, 0);
+  SetPage(Self);
 end;
 
 procedure TInfoPane.Resize(Sender: TObject);
 var
-  Rect: TRect;
   Page: Integer;
 begin
-  Tabs.SetSize(ClientWidth, ClientHeight);
-  Rect.Left := 0;
-  Rect.Top := 0;
-  Rect.Right := Tabs.ClientWidth;
-  Rect.Bottom := Tabs.ClientHeight;
-  Tabs.Perform(TCM_ADJUSTRECT, 0, Integer(@Rect));
   for Page := 0 to High(Pages) do
-    Pages[Page].SetBounds(Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
+    with ClientRect do
+      Pages[Page].SetBounds(Left, Top, Right - Left, Bottom - Top);
 end;
 
 procedure TInfoPane.SaveSettings(Sender: TObject; const Args: array of const);
 begin
-  Settings.WriteInteger(Sender.ClassName, SInfoPage, Tabs.TabIndex);
+  Settings.WriteInteger(Sender.ClassName, SInfoPage, TabIndex);
 end;
 
 procedure TInfoPane.SetGID(const Value: TAria2GID);
@@ -124,14 +113,14 @@ begin
   FCurPage.GID := Value;
 end;
 
-procedure TInfoPane.SetPage(Page: Integer);
+procedure TInfoPane.SetPage(Sender: TObject);
 var
   GID: TAria2GID;
 begin
-  if (Page < 0) or (Page > High(Pages)) then Exit;
+  if (TabIndex < 0) or (TabIndex > High(Pages)) then Exit;
   GID := FCurPage.GID;
   FCurPage.Visible := false;
-  FCurPage := Pages[Page];
+  FCurPage := Pages[TabIndex];
   FCurPage.GID := GID;
   FCurPage.Visible := true;
 end;
@@ -141,12 +130,6 @@ begin
   if Assigned(UpdateThread.Stats) and not Assigned(UpdateThread.Info) then
     GID := '';
   FCurPage.Update(UpdateThread);
-end;
-
-procedure TInfoPane.WMNotify(var Msg: TWMNotify);
-begin
-  if Assigned(Tabs) and (Msg.NMHdr.hwndFrom = Tabs.Handle) and (Msg.NMHdr.code = TCN_SELCHANGE) then
-    SetPage(Tabs.TabIndex);
 end;
 
 { TInfoPage }

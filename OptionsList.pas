@@ -4,6 +4,7 @@ unit OptionsList;
 //TODO: Go to webdocs on F1 in options list (or embedded help?)
 //TODO: Save values history?
 //TODO: Better handling of overlay combobox
+//TODO: Do not select in combo by scroll, show editor by clicking on value, not name
 
 interface
 
@@ -25,7 +26,7 @@ type
     procedure ValueChange(Sender: TObject);
     procedure AdjustValue;
     procedure SetValue(const Value: string);
-    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
+    procedure OptionChange(Sender: TObject);
     procedure WMUser(var Msg: TMessage); message WM_USER;
     procedure WMSetFocus(var Msg: TWMSetFocus); message WM_SETFOCUS;
     property State[Item: Integer]: TOptionState read GetOptionState write SetOptionState;
@@ -37,24 +38,11 @@ type
 
 implementation
 
-const
-  IDOptionsList = $CD01;
-
-var
-  PrevWndProc: Pointer;
-
 function MsgHookProc(hWnd: THandle; Msg: UINT; wParam, lParam: Longint): Longint; stdcall;
 begin
-  Result := CallWindowProc(PrevWndProc, hWnd, Msg, wParam, lParam);
+  Result := CallWindowProc(Pointer(GetWindowLong(hWnd, GWL_USERDATA)), hWnd, Msg, wParam, lParam);
   if (Msg = WM_VSCROLL) or (Msg = WM_VSCROLL) or (Msg = LVM_SCROLL) or (Msg = WM_MOUSEWHEEL) then
     SendMessage(hWnd, WM_USER, 0, 0);
-end;
-
-function ParentHookProc(hWnd: THandle; Msg: UINT; wParam, lParam: Longint): Longint; stdcall;
-begin
-  if (Msg = WM_NOTIFY) and (wParam = IDOptionsList) then
-    SendMessage(PNMHdr(lParam).hwndFrom, Msg, wParam, lParam);
-  Result := CallWindowProc(PrevWndProc, hWnd, Msg, wParam, lParam);
 end;
 
 function EditHookProc(hWnd: THandle; Msg: UINT; wParam, lParam: Longint): Longint; stdcall;
@@ -77,10 +65,8 @@ begin
   ColumnAdd('Option', 50);
   ColumnAdd('Value', 50);
   //OnResize := Resize;
-  SetWindowLong(Handle, GWL_ID, IDOptionsList);
+  OnChange := OptionChange;
   SetWindowLong(Handle, GWL_USERDATA, SetWindowLong(Handle, GWL_WNDPROC, Longint(@MsgHookProc)));
-  if GetWindowLong(ParentHandle, GWL_WNDPROC) <> Integer(@ParentHookProc) then //TODO: Check other hooks too!
-    PrevWndProc := Pointer(SetWindowLong(ParentHandle, GWL_WNDPROC, Longint(@ParentHookProc)));
   Value := TComboBox.Create(Self, csDropDown);
   CBInfo.cbSize := SizeOf(CBInfo);
   GetComboBoxInfo(Value.Handle, CBInfo);
@@ -135,30 +121,24 @@ begin
   AdjustColumns;
 end;
 
-procedure TOptionsList.WMNotify(var Msg: TWMNotify);
+procedure TOptionsList.OptionChange(Sender: TObject);
 var
   i: Integer;
   OptInfo: string;
 begin
-  inherited;
-  if PNMHdr(Msg.NMHdr).hwndFrom = Handle then
-    if (Msg.NMHdr.code = LVN_ITEMCHANGED) and (PNMListView(Msg.NMHdr).uChanged and LVIF_STATE <> 0) and (PNMListView(Msg.NMHdr).uNewState and LVIS_SELECTED <> 0) then
-      with PNMListView(Msg.NMHdr)^ do
-      begin
-        OptInfo := '';
-        for i := 0 to High(Aria2Options) do
-          if Aria2Options[i].Key = GetOptionName(iItem) then
-          begin
-            OptInfo := Aria2Options[i].Value;
-            Break;
-          end;
-        Value.Clear;
-        while OptInfo <> '' do
-          Value.ItemAdd(Tok(OSep, OptInfo));
-        Value.Text := Items[iItem, 1];
-        AdjustValue;
-        Value.SetFocus;
-      end;
+  OptInfo := '';
+  for i := 0 to High(Aria2Options) do
+    if Aria2Options[i].Key = GetOptionName(SelectedIndex) then
+    begin
+      OptInfo := Aria2Options[i].Value;
+      Break;
+    end;
+  Value.Clear;
+  while OptInfo <> '' do
+    Value.ItemAdd(Tok(OSep, OptInfo));
+  Value.Text := Items[SelectedIndex, 1];
+  AdjustValue;
+  Value.SetFocus;
 end;
 
 procedure TOptionsList.WMUser(var Msg: TMessage);

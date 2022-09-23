@@ -124,7 +124,7 @@ begin
       end;
   end;
   SetLength(Options, 0);
-  for i := 0 to MOptions.LineCount - 1 do //TODO: last option can be corrupted
+  for i := 0 to MOptions.LineCount - 1 do
     if MOptions.LineStrings[i] <> '' then
     begin
       SetLength(Options, Length(Options) + 1);

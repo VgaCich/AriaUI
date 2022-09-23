@@ -27,7 +27,7 @@ type
     procedure Resize(Sender: TObject);
     procedure OKClick(Sender: TObject);
     procedure CancelClick(Sender: TObject);
-    procedure WMNotify(var Msg: TWMNotify); message WM_NOTIFY;
+    procedure TabChange(Sender: TObject);
   public
     constructor Create(AParent: TWinControl);
     destructor Destroy; override;
@@ -87,6 +87,7 @@ begin
   Tabs := TTabControl.Create(Self);
   Tabs.Style := tsTabs;
   Tabs.SetBounds(0, 0, ClientWidth, ClientHeight - 35);
+  Tabs.OnChange := TabChange;
   SetLength(Pages, Length(OptionsPages));
   for Page := Low(OptionsPages) to High(OptionsPages) do
   begin
@@ -159,14 +160,11 @@ begin
   BtnCancel.SetPosition(ClientWidth - 80, ClientHeight - 30);
 end;
 
-procedure TOptionsForm.WMNotify(var Msg: TWMNotify);
+procedure TOptionsForm.TabChange(Sender: TObject);
 begin
-  if Assigned(Tabs) and (Msg.NMHdr.hwndFrom = Tabs.Handle) and (Msg.NMHdr.code = TCN_SELCHANGE) then
-  begin
-    FCurPage.Visible := false;
-    FCurPage := Pages[Tabs.TabIndex];
-    FCurPage.Visible := true;
-  end;
+  FCurPage.Visible := false;
+  FCurPage := Pages[Tabs.TabIndex];
+  FCurPage.Visible := true;
 end;
 
 { TOptionsPage }

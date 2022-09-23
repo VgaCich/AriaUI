@@ -18,7 +18,7 @@ type
   TListColumnCallback = procedure(const Column: TListColumn) of object;
   TServerInfo = class
   private
-    FSection, FHost, FUsername, FPassword, FToken: string;
+    FName, FSection, FHost, FUsername, FPassword, FToken: string;
     FPort: Word;
     FSSL: Boolean;
     FTemporary: TStringList;
@@ -29,6 +29,7 @@ type
   public
     constructor Create(ServerIndex: Integer);
     destructor Destroy; override;
+    property Name: string read FName;
     property Host: string read FHost;
     property Port: Word read FPort;
     property Username: string read FUsername;
@@ -69,6 +70,7 @@ const
   SFieldType = 'Type.';
   SFieldField = 'Field.';
   SFieldFlags = 'Flags.';
+  SServers = 'Servers';
   SServer = 'Server.';
   SHost = 'Host';
   SPort = 'Port';
@@ -298,6 +300,7 @@ end;
 constructor TServerInfo.Create(ServerIndex: Integer);
 begin
   inherited Create;
+  FName := Settings.ReadString(SServers, IntToStr(ServerIndex), '###');
   FSection := SServer + IntToStr(ServerIndex);
   FHost := Settings.ReadString(FSection, SHost, 'localhost');
   FPort := Settings.ReadInteger(FSection, SPort, 6800);
