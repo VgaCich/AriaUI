@@ -36,6 +36,7 @@ type
     procedure SetPage(Sender: TObject);
   public
     constructor Create(AParent: TWinControl);
+    destructor Destroy; override;
     procedure Update(UpdateThread: TUpdateThread);
     property GID: TAria2GID read GetGID write SetGID;
     property UpdateKeys: TStringArray read GetUpdateKeys;
@@ -76,6 +77,12 @@ begin
   OnChange := SetPage;
   EventBus.AddListener(EvLoadSettings, LoadSettings);
   EventBus.AddListener(EvSaveSettings, SaveSettings);
+end;
+
+destructor TInfoPane.Destroy;
+begin
+  EventBus.RemoveListeners([LoadSettings, SaveSettings]);
+  inherited;
 end;
 
 function TInfoPane.GetGID: TAria2GID;
@@ -139,7 +146,6 @@ begin
   inherited Create(Parent, '');
   FParent := Parent;
   Border := 2;
-  ExStyle := 0;
 end;
 
 destructor TInfoPage.Destroy;

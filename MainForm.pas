@@ -15,6 +15,7 @@ unit MainForm;
 //TODO: Perform full refresh sometimes (ex. after restoration from tray) (or keep received data?)
 //TODO: "Copy magnet link" option
 //TODO: Tray tips on transfers state change
+//TODO: Clear ETA/speeds/etc if no connection
 
 interface
 
@@ -51,6 +52,7 @@ type
     procedure ExitProgram;
     procedure ExportTransfersList;
     function FormClose(Sender: TObject): Boolean;
+    procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     function FormMinimize(Sender: TObject): Boolean;
     procedure FormResize(Sender: TObject);
@@ -217,6 +219,7 @@ begin
   FEvSaveSettings := EventBus.RegisterEvent(EvSaveSettings);
   FEvServerChanged := EventBus.RegisterEvent(EvServerChanged);
   FEvUpdate := EventBus.RegisterEvent(EvUpdate);
+  OnCreate := FormCreate;
   OnDestroy := FormDestroy;
   OnClose := FormClose;
   OnMinimize := FormMinimize;
@@ -277,9 +280,6 @@ begin
   Info.SetBounds(0, Splitter.Bottom, ClientWidth, StatusBar.Top - Splitter.Bottom);
   //DragAcceptFiles(Handle, true);
   OnResize := FormResize;
-  LoadSettings;
-  FormResize(Self);
-  FUpdateThread.Resume;
 end;
 
 destructor TMainForm.Destroy;
@@ -487,7 +487,7 @@ procedure TMainForm.AddMetalink(Sender: TObject);
 begin
   try
     with FAria2 do
-      CheckResult(AddMetalink(LoadFile(FormAdd.FileName.Text), FormAdd.Options));
+      CheckResult(AddMetalink(LoadFile((Sender as TAddForm).FileName), FormAdd.Options));
   except
     on E: Exception do ShowException;
   end;
@@ -497,17 +497,41 @@ procedure TMainForm.AddTorrent(Sender: TObject);
 begin
   try
     with FAria2 do
-      CheckResult(AddTorrent(LoadFile(FormAdd.FileName.Text), [], FormAdd.Options));
+      CheckResult(AddTorrent(LoadFile((Sender as TAddForm).FileName), [], FormAdd.Options));
   except
     on E: Exception do ShowException;
   end;
 end;
 
 procedure TMainForm.AddURL(Sender: TObject);
+var
+  i: Integer;
+  Reqs: array of TRequestID;
 begin
   try
-    with FAria2 do
-      CheckResult(AddUri(FormAdd.URLs, FormAdd.Options)); //TODO: Async CheckResult
+    with FAria2, (Sender as TAddForm) do
+      if not SeparateURLs then
+        CheckResult(AddUri(URLs, Options)) //TODO: Async CheckResult
+      else begin
+        SetLength(Reqs, Length(URLs));
+        try
+          BeginBatch;
+          try
+            for i := 0 to High(URLs) do
+              Reqs[i] := AddUri([URLs[i]], Options);
+          finally
+            EndBatch;
+          end;
+          for i := 0 to High(Reqs) do
+          try
+            CheckResult(Reqs[i]);
+          except
+            on E: Exception do ShowException;
+          end;
+        finally
+          Finalize(Reqs);
+        end;
+      end;
   except
     on E: Exception do ShowException;
   end;
@@ -565,6 +589,13 @@ begin
   Hide;
   if FExiting then
     SaveSettings;
+end;
+
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  LoadSettings;
+  FormResize(Self);
+  FUpdateThread.Resume;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -713,7 +744,7 @@ begin
     FRequestTransport.Connect(Host, Port, Username, Password, SSL);
   end;
   EventBus.SendEvent(FEvServerChanged, Self, [PrevServer, ServersList.Server]);
-  //TransfersList.SetFocus;
+  TransfersList.SetFocus; //TODO: Disable with option?
 end;
 
 function TMainForm.TransferProperties(GID: TAria2GID; Param: Integer): Boolean;

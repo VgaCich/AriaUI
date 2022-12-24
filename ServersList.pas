@@ -57,6 +57,7 @@ begin
   FServer := nil;
   for i := 0 to FServers.Count - 1 do
     TObject(FServers[i]).Free;
+  FServers.Clear;
   while TabCount > 0 do
     TabDelete(0);
 end;
