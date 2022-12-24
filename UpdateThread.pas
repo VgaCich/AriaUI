@@ -73,6 +73,14 @@ var
     end;
   end;
 
+  function ExtractName(const Path: string): string;
+  begin
+    if SameText(Copy(Path, 1, 10), '[METADATA]') then
+      Result := Path
+    else
+      Result := ExtractFileName(Path);
+  end;
+
 var
   i: Integer;
   ActiveID, WaitingID, StoppedID, InfoID: TRequestID;
@@ -132,9 +140,9 @@ begin
                 Files.Index := 0;
                 try
                   if Files[sfPath] <> '' then
-                    Names.Values[NameIDs[i]] := ExtractFileName(Files[sfPath])
+                    Names.Values[NameIDs[i]] := ExtractName(Files[sfPath])
                   else
-                    Names.Values[NameIDs[i]] := DecodeURL(ExtractFileName(Files[sfUris + '.0.' + sfUri]));
+                    Names.Values[NameIDs[i]] := DecodeURL(ExtractName(Files[sfUris + '.0.' + sfUri]));
                 finally
                   FreeAndNil(Files);
                 end;
