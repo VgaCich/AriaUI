@@ -8,7 +8,7 @@ uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
 
 const
-  AppName = 'TorrentInfo 2.4';
+  AppName = 'TorrentInfo 2.4.1';
 
 type
   TExitCodes = (ecUnknownArgument, ecUnknownCommand, ecException, ecCreateTorrent,
@@ -520,7 +520,7 @@ var
 
 begin
   ExitCode := [];
-  WriteLn(AppName + ' (c)Vga, 2017-2022');
+  WriteLn(AppName + ' (c)Vga, 2017-2023');
   WriteLn;
   if ParamCount = 0 then
   begin
@@ -583,6 +583,7 @@ begin
       end;
     end;
   finally
+    Flush(Output);
     FreeAndNil(Torrent);
   end;
 end.

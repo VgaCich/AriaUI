@@ -2,6 +2,10 @@ unit AddForm;
 
 //TODO: Configurable "pinned options", path history & pinned paths
 //TODO: "Option presets"
+//TODO: Focus url list on window activation
+//TODO: Check integrity etc
+//TODO: Better editor for urls/options
+//TODO: Clear button
 
 interface
 
