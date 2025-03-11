@@ -3,6 +3,9 @@ program TorrentInfo;
 {$APPTYPE CONSOLE}
 
 //TODO: Multithread creation/verification
+//TODO: List trackers
+//TODO: Display exact torrent size
+//TODO: Message if can't load torrent (file not found, etc)
 
 uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;

@@ -3,6 +3,8 @@ unit PageFiles;
 //TODO: hotkeys, sorting
 //TODO: external saving of multiple index-out options?
 //TODO: (optionally) display as tree?
+//TODO: files list trimming too long names (relies on MAX_PATH?)
+//TODO: crashes if aria replied with error to renaming
 
 interface
 
