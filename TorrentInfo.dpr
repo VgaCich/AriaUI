@@ -6,6 +6,7 @@ program TorrentInfo;
 //TODO: List trackers
 //TODO: Display exact torrent size
 //TODO: Message if can't load torrent (file not found, etc)
+//TODO: Reports in all commands (f.e. -a removes trackers silently)
 
 uses
   SysSfIni, Windows, AvL, avlUtils, BTUtils;
