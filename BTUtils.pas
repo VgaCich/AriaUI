@@ -623,7 +623,7 @@ var
   Tail: packed array[0..127] of Byte;
   i, TailSize: Integer;
   TempSize: Int64;
-  P: Pointer;
+  P: PByteArray;
   f, k, t: Cardinal;
   h, s: packed array[0..4] of Cardinal;
   w: packed array[0..79] of Cardinal;
@@ -636,7 +636,7 @@ var
 
   function GetBlock: Boolean;
   begin
-    Result := Size + TailSize > 0;
+    Result := (Size > 0) or (TailSize > 0);
     if not Result then Exit;
     if Size = 0 then
     begin
@@ -645,7 +645,7 @@ var
       TailSize := 0;
     end;
     Move(P^, w, 64);
-    Inc(Cardinal(P), 64);
+    P := @P[64];
     Dec(Size, 64);
   end;
 
@@ -663,11 +663,12 @@ var
   end;
 
 begin
+  if not Assigned(@Data) or (Size < 0) then Exit;
   TailSize := Size mod 64;
-  TempSize := 8 * Size;
+  TempSize := 8 * Int64(Size);
   Size := Size - TailSize;
   P := @Data;
-  Move(Pointer(Integer(P) + Size)^, Tail, TailSize);
+  Move(P[Size], Tail, TailSize);
   AddTail($80);
   while TailSize mod 64 <> 56 do
     AddTail(0);
